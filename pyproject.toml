@@ -1,0 +1,85 @@
+[tool.poetry]
+name = "omni_morph"
+version = "0.1.0"
+description = "Transform, inspect, and merge data files with a single command-line Swiss Army knife for data engineers"
+authors = ["Christian R. Jaensch <@crjaensch>"]
+readme = "README.md"
+packages = [{include = "omni_morph"}]
+homepage = "https://github.com/crjaensch/OmniMorph"
+repository = "https://github.com/crjaensch/OmniMorph"
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+fastavro = ">=1.10.0,<2.0.0"
+pyarrow = ">=15.0.0,<16.0.0"
+python-snappy = "^0.7.0"
+numpy = "^1.25.2"
+polars = ">=0.18.0,<1.0.0"
+typer = ">=0.10.0,<0.12.0"
+
+[tool.poetry.group.lint.dependencies]
+isort = "^5.10.1"
+flake8 = "^6.1.0"
+mypy = "^1.5"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.3"
+pytest-cov = "^4.1.0"
+pytest-randomly = "^3.15.0"
+
+[tool.tox]
+legacy_tox_ini = '''
+[tox]
+envlist = py{311,312}
+isolated_build = true
+skip_missing_interpreters = true
+skipsdist = true
+[testenv]
+allowlist_externals = poetry
+skip_install = true
+commands =
+  poetry install --no-root -v
+  pip install -e .
+  poetry run pytest --cov src --cov-report xml
+'''
+
+[tool.mypy]
+# 3rd party import
+ignore_missing_imports = true
+# dynamic typing
+disallow_any_unimported = true
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = true
+disallow_any_generics = false
+disallow_subclassing_any = true
+# platform
+python_version = "3.12"
+# untyped
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+# None and Optional
+no_implicit_optional = true
+# Warnings
+warn_return_any = false
+warn_unreachable = true
+# Misc
+pretty = true
+
+[tool.poetry.scripts]
+omni-morph-cli = "omni_morph.main:app"
+
+[build-system]
+requires = ["setuptools", "poetry_core>=1.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["src", "test"]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+addopts = "-p no:cacheprovider" # deactivating pytest caching.
