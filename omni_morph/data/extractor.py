@@ -1,13 +1,14 @@
 """
-extractor.py  ── unified head / tail extraction function for Parquet, Avro, JSONL and CSV
+extractor.py  ── unified head / tail / sample extraction functions for Parquet, Avro, JSONL and CSV
 
 Public API
 ==========
 
-    from omni_morph.data.extractor import head, tail, ExtractError
+    from omni_morph.data.extractor import head, tail, sample, ExtractError
 
     tbl   = head("events.parquet", 100)               # pyarrow.Table
     frame = tail("logs.jsonl",  20, return_type="pandas")
+    sample_tbl = sample("data.csv", n=50, seed=42)     # random sample of 50 records
 
 ---------------------------------------------------------------------------
 """

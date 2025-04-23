@@ -60,11 +60,15 @@ omni-morph-cli count data.parquet
 
 # Convert from one format to another
 omni-morph-cli to-json data.csv output.json
+
+# Randomly sample records from a file
+omni-morph-cli random-sample data.csv --n 50 --seed 42
+omni-morph-cli random-sample data.parquet --fraction 0.1
 ```
 
 ## Python example usage:
 ```python
-from omni_morph.data import convert, Format, head, tail
+from omni_morph.data import convert, Format, head, tail, sample
 
 # one-liner convenience
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
@@ -74,6 +78,10 @@ convert("records.json", "records_converted.avro")   # JSON   → Avro
 # Extract first/last records from files
 first_records = head("data.csv", 10)                # Get first 10 records as PyArrow Table
 last_records = tail("data.parquet", 5, return_type="pandas")  # Get last 5 records as Pandas DataFrame
+
+# Random sampling of records
+sample_n = sample("data.csv", n=50, seed=42)        # Sample exactly 50 records
+sample_frac = sample("data.parquet", fraction=0.1)  # Sample approximately 10% of records
 
 # or the enum-based flavour (handy for in-memory tables)
 from pathlib import Path
@@ -99,6 +107,15 @@ schema = get_schema("data.file", fmt=Format.CSV)
 - JSON (.json)
 - Avro (.avro)
 - Parquet (.parquet)
+
+## Large File Processing
+
+OmniMorph is optimized for processing very large data files:
+
+- **Parquet Files**: Memory-efficient processing for files >10GB using intelligent row group handling
+- **Avro Files**: Two-pass sampling approach for files >1GB that maintains constant memory usage
+
+These optimizations apply to both the `tail()` and `sample()` functions (and their CLI counterparts), making OmniMorph suitable for working with datasets in the 10-100GB range without running out of memory.
 
 ## Schema Inference
 
