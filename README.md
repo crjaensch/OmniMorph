@@ -41,7 +41,7 @@ commands
 
 ## Python example usage:
 ```python
-from omni_morph.data.converter import convert, Format
+from omni_morph.data import convert, Format
 
 # one-liner convenience
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
@@ -53,5 +53,5 @@ from pathlib import Path
 import pyarrow as pa
 
 table = pa.table({"x": [1, 2, 3]})
-from omni_morph.data.converter import write
+from omni_morph.data import write
 write(table, Path("my_table.avro"), Format.AVRO)
