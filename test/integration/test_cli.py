@@ -66,12 +66,20 @@ def test_head():
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 20  # Default is 20 records
+    
+    # Verify the output contains valid data
+    assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
 
     # Test with custom number of records
     result = run_cli(["head", str(CSV_FILE), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
+    
+    # Test with non-existent file
+    result = run_cli(["head", "nonexistent.csv"], expected_exit_code=1, check=False)
+    assert result.returncode == 1
+    assert "Error:" in result.stderr
 
 
 def test_tail():
@@ -82,12 +90,20 @@ def test_tail():
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 20  # Default is 20 records
+    
+    # Verify the output contains valid data
+    assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
 
     # Test with custom number of records
     result = run_cli(["tail", str(CSV_FILE), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
+    
+    # Test with non-existent file
+    result = run_cli(["tail", "nonexistent.csv"], expected_exit_code=1, check=False)
+    assert result.returncode == 1
+    assert "Error:" in result.stderr
 
 
 def test_count():

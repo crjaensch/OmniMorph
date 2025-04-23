@@ -3,8 +3,8 @@ from pathlib import Path
 import importlib.metadata
 import json
 from omni_morph.data.converter import read, convert, Format
+from omni_morph.data.extractor import head as extract_head, tail as extract_tail
 import typer
-from omni_morph.data.converter import read, convert, Format
 
 DEFAULT_RECORDS = 20
 
@@ -31,17 +31,30 @@ def main_callback(
 @app.command()
 def head(file_path: Path = typer.Argument(..., help="Path to a file"),
          n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records")):
-    table = read(file_path)
-    for row in table.to_pylist()[:n]:
-        typer.echo(row)
+    """
+    Display the first n records of a file.
+    """
+    try:
+        table = extract_head(str(file_path), n)
+        for row in table.to_pylist():
+            typer.echo(row)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def tail(file_path: Path = typer.Argument(..., help="Path to a file"),
          n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records")):
-    table = read(file_path)
-    rows = table.to_pylist()[-n:]
-    for row in rows:
-        typer.echo(row)
+    """
+    Display the last n records of a file.
+    """
+    try:
+        table = extract_tail(str(file_path), n)
+        for row in table.to_pylist():
+            typer.echo(row)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def meta(file_path: Path = typer.Argument(..., help="Path to a file")):

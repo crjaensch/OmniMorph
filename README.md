@@ -54,12 +54,16 @@ omni-morph-cli to-json data.csv output.json
 
 ## Python example usage:
 ```python
-from omni_morph.data import convert, Format
+from omni_morph.data import convert, Format, head, tail
 
 # one-liner convenience
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
 convert("data.parquet", "out/data.csv")             # Parquet → CSV
 convert("records.json", "records_converted.avro")   # JSON   → Avro
+
+# Extract first/last records from files
+first_records = head("data.csv", 10)                # Get first 10 records as PyArrow Table
+last_records = tail("data.parquet", 5, return_type="pandas")  # Get last 5 records as Pandas DataFrame
 
 # or the enum-based flavour (handy for in-memory tables)
 from pathlib import Path
@@ -71,7 +75,6 @@ write(table, Path("my_table.avro"), Format.AVRO)
 
 # Extract schema from a file
 from omni_morph.utils.file_utils import get_schema
-from omni_morph.data.formats import Format
 
 # Automatically detect format from file extension
 schema = get_schema("data.csv")
