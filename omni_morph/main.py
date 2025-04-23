@@ -45,6 +45,11 @@ def tail(file_path: Path = typer.Argument(..., help="Path to a file"),
 
 @app.command()
 def meta(file_path: Path = typer.Argument(..., help="Path to a file")):
+    typer.echo("meta command not implemented", err=True)
+    raise typer.Exit(code=1)
+
+@app.command()
+def schema(file_path: Path = typer.Argument(..., help="Path to a file")):
     try:
         # Import here to avoid import errors for other commands
         from omni_morph.utils.file_utils import get_schema
@@ -53,11 +58,6 @@ def meta(file_path: Path = typer.Argument(..., help="Path to a file")):
     except Exception as e:
         typer.echo(f"Error extracting schema: {e}", err=True)
         raise typer.Exit(code=1)
-
-@app.command()
-def schema(file_path: Path = typer.Argument(..., help="Path to a file")):
-    typer.echo("schema command not implemented", err=True)
-    raise typer.Exit(code=1)
 
 @app.command()
 def stats(file_path: Path = typer.Argument(..., help="Path to a file")):

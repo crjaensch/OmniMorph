@@ -135,20 +135,18 @@ def test_conversion_commands():
 
 # Test unimplemented commands - they should fail with exit code 1
 def test_meta():
-    """Test the meta command."""
-    result = run_cli(["meta", str(CSV_FILE)])
-    # Should succeed and print JSON schema
+    """Test the meta command (unimplemented)."""
+    result = run_cli(["meta", str(CSV_FILE)], expected_exit_code=1, check=False)
+    assert "not implemented" in result.stderr.lower()
+
+def test_schema():
+    """Test the schema command."""
+    result = run_cli(["schema", str(CSV_FILE)])
+    # Should succeed and print CSV schema
     assert result.returncode == 0
     stdout = result.stdout.strip()
     assert stdout.startswith("{") and stdout.endswith("}"), \
-        "Meta command should output JSON schema"
-
-
-def test_schema():
-    """Test the schema command (unimplemented)."""
-    result = run_cli(["schema", str(CSV_FILE)], expected_exit_code=1, check=False)
-    assert "not implemented" in result.stderr.lower()
-
+        "Schema command should output CSV schema"
 
 def test_stats():
     """Test the stats command (unimplemented)."""
