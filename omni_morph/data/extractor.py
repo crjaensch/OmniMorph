@@ -17,6 +17,7 @@ import os
 from enum import Enum
 from typing import Literal, Optional, Union
 from pathlib import Path
+import random
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -29,20 +30,19 @@ except ImportError:  # fastavro is optional until Avro is actually used
     avro_reader = None
 
 from .formats import Format
+from .sampling import parquet_sample, streaming_sample, iter_avro, iter_jsonl, iter_csv
+from .exceptions import ExtractError
 
 __all__ = [
     "head",
     "tail",
+    "sample",
     "ExtractError",
 ]
 
 # ---------------------------------------------------------------------------
-# Exceptions & internal enums
+# Internal enums
 # ---------------------------------------------------------------------------
-
-class ExtractError(RuntimeError):
-    """Raised when an extract operation cannot be completed."""
-
 
 class _Operation(str, Enum):
     HEAD = "head"
@@ -145,6 +145,87 @@ def tail(
         small_file_threshold=small_file_threshold,
     )
 
+# ---------------------------------------------------------------------------
+#  RANDOM SAMPLING PUBLIC HELPER
+# ---------------------------------------------------------------------------
+
+def sample(
+    path: str,
+    *,
+    n: Optional[int] = None,
+    fraction: Optional[float] = None,
+    fmt: Optional[Format] = None,
+    seed: Optional[int] = None,
+    with_replacement: bool = False,
+    return_type: Literal["arrow", "pandas"] = "arrow",
+    small_file_threshold: int = 100 * 1024 * 1024,
+):
+    """Return a random sample of records from a file.
+    
+    This function extracts a random sample of records from the specified file.
+    The sample can be either a fixed number of records or a fraction of the total.
+    Exactly one of `n` or `fraction` must be supplied.
+    
+    Args:
+        path: A string pointing to the source file (.parquet/.avro/.jsonl/.csv).
+        n: Optional number of records to sample. If provided, exactly this many
+           records will be returned (unless the file contains fewer records).
+        fraction: Optional probability (0,1] of keeping each record. Results in
+                 an approximate sample size of fraction * total_records.
+        fmt: Optional format specification. If None, the format is inferred
+             from the file extension.
+        seed: Optional random seed for reproducible sampling.
+        with_replacement: Whether to sample with replacement. Default is False.
+                         Note that for large files, sampling is always done
+                         without replacement due to streaming limitations.
+        return_type: The return type, either "arrow" for PyArrow Table or
+                    "pandas" for Pandas DataFrame.
+        small_file_threshold: Size threshold in bytes below which the file is
+                             considered small enough to load entirely into memory.
+    
+    Returns:
+        Either a PyArrow Table or Pandas DataFrame containing the sampled records,
+        depending on the return_type parameter.
+    
+    Raises:
+        ValueError: If neither or both of n and fraction are specified.
+        ExtractError: If the sampling operation fails or if n exceeds the
+                     number of available records when sampling without replacement.
+    """
+    if (n is None) == (fraction is None):   # xor check
+        raise ValueError("Specify exactly one of `n` or `fraction`.")
+
+    rng = random.Random(seed)
+    resolved_fmt = fmt or Format.from_path(path)
+
+    try:
+        if resolved_fmt is Format.PARQUET:
+            table = parquet_sample(
+                path, n, fraction, rng, with_replacement, small_file_threshold
+            )
+        elif resolved_fmt is Format.AVRO:
+            table = streaming_sample(
+                iter_avro(path), n, fraction, rng, with_replacement,
+                small_file_threshold
+            )
+        elif resolved_fmt is Format.JSON:
+            table = streaming_sample(
+                iter_jsonl(path), n, fraction, rng, with_replacement,
+                small_file_threshold
+            )
+        elif resolved_fmt is Format.CSV:
+            table = streaming_sample(
+                iter_csv(path), n, fraction, rng, with_replacement,
+                small_file_threshold
+            )
+        else:
+            raise ExtractError(f"Unsupported format {resolved_fmt!r}")
+    except Exception as exc:
+        raise ExtractError(
+            f"sample failed for {os.path.basename(path)!r}: {exc}"
+        ) from exc
+
+    return table if return_type == "arrow" else table.to_pandas()
 
 # ---------------------------------------------------------------------------
 # Core engine – kept exactly as before (only _Operation renamed)
@@ -421,11 +502,3 @@ def _tail_lines(path: str, n: int, block_size: int = 8192) -> list[str]:
 def _read_csv_header(path: str) -> str:
     with open(path, "r", encoding="utf8") as fh:
         return fh.readline().rstrip("\n")
-
-
-# ---------------------------------------------------------------------------
-# Quick CLI-like demo
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    print(head("example.parquet", 5).to_pandas())
-    print(tail("example.csv", 10, return_type="pandas"))

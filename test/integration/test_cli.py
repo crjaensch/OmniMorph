@@ -197,21 +197,45 @@ def test_merge():
 
 
 def test_random_sample():
-    """Test the random-sample command (unimplemented)."""
+    """Test the random-sample command."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / "sample.csv"
+        
         # Test with n parameter
         result = run_cli(
             ["random-sample", str(CSV_FILE), str(output_path), "--n", "10"],
-            expected_exit_code=1,
             check=False
         )
-        assert "not implemented" in result.stderr.lower()
-
+        assert result.returncode == 0, f"Command failed with error: {result.stderr}"
+        # Verify the output file exists and has content
+        assert output_path.exists(), "Output file was not created"
+        assert output_path.stat().st_size > 0, "Output file is empty"
+        
         # Test with fraction parameter
+        output_path2 = Path(tmpdir) / "sample_fraction.csv"
         result = run_cli(
-            ["random-sample", str(CSV_FILE), str(output_path), "--fraction", "0.1"],
+            ["random-sample", str(CSV_FILE), str(output_path2), "--fraction", "0.1"],
+            check=False
+        )
+        assert result.returncode == 0, f"Command failed with error: {result.stderr}"
+        assert output_path2.exists(), "Output file was not created"
+        assert output_path2.stat().st_size > 0, "Output file is empty"
+        
+        # Test with invalid parameters (neither n nor fraction)
+        output_path3 = Path(tmpdir) / "sample_invalid.csv"
+        result = run_cli(
+            ["random-sample", str(CSV_FILE), str(output_path3)],
             expected_exit_code=1,
             check=False
         )
-        assert "not implemented" in result.stderr.lower()
+        assert result.returncode == 1
+        assert "Error:" in result.stderr
+        
+        # Test with non-existent file
+        result = run_cli(
+            ["random-sample", "nonexistent.csv", str(output_path)],
+            expected_exit_code=1,
+            check=False
+        )
+        assert result.returncode == 1
+        assert "Error:" in result.stderr

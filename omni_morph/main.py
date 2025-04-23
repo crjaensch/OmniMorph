@@ -2,8 +2,8 @@ import logging
 from pathlib import Path
 import importlib.metadata
 import json
-from omni_morph.data.converter import read, convert, Format
-from omni_morph.data.extractor import head as extract_head, tail as extract_tail
+from omni_morph.data.converter import read, convert, Format, write
+from omni_morph.data.extractor import head as extract_head, tail as extract_tail, sample as extract_sample
 import typer
 
 DEFAULT_RECORDS = 20
@@ -164,9 +164,22 @@ def to_parquet(file_path: Path = typer.Argument(..., help="Path to the input fil
 def random_sample(file_path: Path = typer.Argument(..., help="Path to the input file"),
                    output_path: Path = typer.Argument(..., help="Path to the output file"),
                    n: int = typer.Option(None, "--n", help="Number of records"),
-                   fraction: float = typer.Option(None, "--fraction", help="Fraction of records")):
+                   fraction: float = typer.Option(None, "--fraction", help="Fraction of records"),
+                   seed: int = typer.Option(None, "--seed", help="Random seed for reproducibility")):
     """
     Randomly sample records from a file.
     """
-    typer.echo("random-sample command not implemented", err=True)
-    raise typer.Exit(code=1)
+    try:
+        # Extract the sample as a PyArrow Table
+        table = extract_sample(str(file_path), n=n, fraction=fraction, seed=seed)
+        
+        # Determine the output format from the file extension
+        output_fmt = Format.from_path(output_path)
+        
+        # Write the table directly to the output file
+        write(table, output_path, fmt=output_fmt)
+        
+        typer.echo(f"Sampled data written to {output_path}")
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
