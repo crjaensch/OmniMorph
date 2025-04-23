@@ -8,7 +8,7 @@ import typer
 
 DEFAULT_RECORDS = 20
 
-app = typer.Typer()
+app = typer.Typer(help="Transform, inspect, and merge data files with a single command-line tool")
 
 @app.callback(invoke_without_command=True)
 def main_callback(
@@ -29,10 +29,10 @@ def main_callback(
     logging.basicConfig(level=level)
 
 @app.command()
-def head(file_path: Path = typer.Argument(..., help="Path to a file"),
-         n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records")):
+def head(file_path: Path = typer.Argument(..., help="Path to the input file"),
+         n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records to display")):
     """
-    Display the first n records of a file.
+    Print the first N records from a file.
     """
     try:
         table = extract_head(str(file_path), n)
@@ -43,10 +43,10 @@ def head(file_path: Path = typer.Argument(..., help="Path to a file"),
         raise typer.Exit(code=1)
 
 @app.command()
-def tail(file_path: Path = typer.Argument(..., help="Path to a file"),
-         n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records")):
+def tail(file_path: Path = typer.Argument(..., help="Path to the input file"),
+         n: int = typer.Option(DEFAULT_RECORDS, "-n", "--number", help="Number of records to display")):
     """
-    Display the last n records of a file.
+    Print the last N records from a file.
     """
     try:
         table = extract_tail(str(file_path), n)
@@ -57,12 +57,18 @@ def tail(file_path: Path = typer.Argument(..., help="Path to a file"),
         raise typer.Exit(code=1)
 
 @app.command()
-def meta(file_path: Path = typer.Argument(..., help="Path to a file")):
+def meta(file_path: Path = typer.Argument(..., help="Path to the input file")):
+    """
+    Print the metadata of a file.
+    """
     typer.echo("meta command not implemented", err=True)
     raise typer.Exit(code=1)
 
 @app.command()
-def schema(file_path: Path = typer.Argument(..., help="Path to a file")):
+def schema(file_path: Path = typer.Argument(..., help="Path to the input file")):
+    """
+    Print the schema for a file.
+    """
     try:
         # Import here to avoid import errors for other commands
         from omni_morph.utils.file_utils import get_schema
@@ -73,41 +79,59 @@ def schema(file_path: Path = typer.Argument(..., help="Path to a file")):
         raise typer.Exit(code=1)
 
 @app.command()
-def stats(file_path: Path = typer.Argument(..., help="Path to a file")):
+def stats(file_path: Path = typer.Argument(..., help="Path to the input file")):
+    """
+    Print statistics about a file.
+    """
     typer.echo("stats command not implemented", err=True)
     raise typer.Exit(code=1)
 
 @app.command()
-def validate(file_path: Path = typer.Argument(..., help="Path to a file"),
+def validate(file_path: Path = typer.Argument(..., help="Path to the input file"),
              schema_path: Path = typer.Option(None, "--schema-path", help="Path to schema file")):
+    """
+    Validate a file against a schema.
+    """
     typer.echo("validate command not implemented", err=True)
     raise typer.Exit(code=1)
 
 @app.command()
 def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
           output_path: Path = typer.Argument(..., help="Output file path")):
+    """
+    Merge multiple files of the same or different formats into one.
+    """
     typer.echo("merge command not implemented", err=True)
     raise typer.Exit(code=1)
 
 @app.command()
-def count(file_path: Path = typer.Argument(..., help="Path to a file")):
+def count(file_path: Path = typer.Argument(..., help="Path to the input file")):
+    """
+    Count the number of records in a file.
+    """
     table = read(file_path)
     typer.echo(table.num_rows)
 
 @app.command()
-def to_json(file_path: Path = typer.Argument(...),
-            output_path: Path = typer.Argument(...),
+def to_json(file_path: Path = typer.Argument(..., help="Path to the input file"),
+            output_path: Path = typer.Argument(..., help="Path to the output JSON file"),
             pretty: bool = typer.Option(False, "--pretty", help="Pretty print JSON")):
+    """
+    Convert one file to JSON format.
+    """
     convert(file_path, output_path, dst_fmt=Format.JSON, 
             write_kwargs={"pretty": pretty} if pretty else None)
 
 @app.command()
-def to_csv(file_path: Path = typer.Argument(...),
-           output_path: Path = typer.Argument(...),
+def to_csv(file_path: Path = typer.Argument(..., help="Path to the input file"),
+           output_path: Path = typer.Argument(..., help="Path to the output CSV file"),
            has_header: bool = typer.Option(True, "--has-header", help="CSV has header"),
            delimiter: str = typer.Option(",", help="Delimiter"),
            line_terminator: str = typer.Option("\n", help="Line terminator"),
            quote: str = typer.Option('"', help="Quote char")):
+    """
+    Convert one file to CSV format.
+    """
     write_kwargs = {
         "include_header": has_header,
         "delimiter": delimiter,
@@ -117,23 +141,32 @@ def to_csv(file_path: Path = typer.Argument(...),
     convert(file_path, output_path, dst_fmt=Format.CSV, write_kwargs=write_kwargs)
 
 @app.command()
-def to_avro(file_path: Path = typer.Argument(...),
-            output_path: Path = typer.Argument(...),
+def to_avro(file_path: Path = typer.Argument(..., help="Path to the input file"),
+            output_path: Path = typer.Argument(..., help="Path to the output Avro file"),
             compression: str = typer.Option("uncompressed", "--compression", help="Compression method")):
+    """
+    Convert one file to Avro format.
+    """
     write_kwargs = {"compression": compression} if compression != "uncompressed" else None
     convert(file_path, output_path, dst_fmt=Format.AVRO, write_kwargs=write_kwargs)
 
 @app.command()
-def to_parquet(file_path: Path = typer.Argument(...),
-               output_path: Path = typer.Argument(...),
+def to_parquet(file_path: Path = typer.Argument(..., help="Path to the input file"),
+               output_path: Path = typer.Argument(..., help="Path to the output Parquet file"),
                compression: str = typer.Option("uncompressed", "--compression", help="Compression method")):
+    """
+    Convert one file to Parquet format.
+    """
     write_kwargs = {"compression": compression} if compression != "uncompressed" else None
     convert(file_path, output_path, dst_fmt=Format.PARQUET, write_kwargs=write_kwargs)
 
 @app.command()
-def random_sample(file_path: Path = typer.Argument(...),
-                   output_path: Path = typer.Argument(...),
+def random_sample(file_path: Path = typer.Argument(..., help="Path to the input file"),
+                   output_path: Path = typer.Argument(..., help="Path to the output file"),
                    n: int = typer.Option(None, "--n", help="Number of records"),
                    fraction: float = typer.Option(None, "--fraction", help="Fraction of records")):
+    """
+    Randomly sample records from a file.
+    """
     typer.echo("random-sample command not implemented", err=True)
     raise typer.Exit(code=1)

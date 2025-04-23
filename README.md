@@ -14,29 +14,39 @@ pip install omni_morph
 ## Usage
 
 ```bash
-omni-morph-cli -h
+omni-morph-cli --help
 ```
 
-```bash
-usage: omni-morph-cli [-h] {count, head, tail, meta, merge, random-sample, schema, stats, validate, to-json, to-csv, to-avro, to-parquet} ...
+```text
+Usage: omni-morph-cli [OPTIONS] COMMAND [ARGS]...
 
-positional arguments:
-  {count, head, tail, meta, merge, random-sample, schema, stats, validate, to-json, to-csv, to-avro, to-parquet} ...
+  Transform, inspect, and merge data files with a single command-line tool
 
-commands
-    count               Count the number of records in a file
-    head                Print the first N records from a file
-    tail                Print the last N records from a file
-    meta                Print a file's metadata
-    merge               Merge multiple files of the same or different formats into one (-t target-format)
-    random-sample       Randomly sample records from a file
-    schema              Print the schema for a file
-    stats               Print statistics about a file
-    validate            Validate a file
-    to-json             Convert one file to JSON format
-    to-csv              Convert one file to CSV format
-    to-avro             Convert one file to Avro format
-    to-parquet          Convert one file to Parquet format
+Options:
+  -v, --verbose                   Enable info logging
+  -d, --debug                     Enable debug logging
+  --version                       Show version and exit
+  --install-completion [bash|zsh|fish|powershell|pwsh]
+                                  Install completion for the specified shell.
+  --show-completion [bash|zsh|fish|powershell|pwsh]
+                                  Show completion for the specified shell, to
+                                  copy it or customize the installation.
+  --help                          Show this message and exit.
+
+Commands:
+  count          Count the number of records in a file.
+  head           Print the first N records from a file.
+  merge          Merge multiple files of the same or different formats...
+  meta           Print the metadata of a file.
+  random-sample  Randomly sample records from a file.
+  schema         Print the schema for a file.
+  stats          Print statistics about a file.
+  tail           Print the last N records from a file.
+  to-avro        Convert one file to Avro format.
+  to-csv         Convert one file to CSV format.
+  to-json        Convert one file to JSON format.
+  to-parquet     Convert one file to Parquet format.
+  validate       Validate a file against a schema.
 ```
 
 ### Examples
