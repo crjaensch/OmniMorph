@@ -1,4 +1,3 @@
-import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -136,9 +135,13 @@ def test_conversion_commands():
 
 # Test unimplemented commands - they should fail with exit code 1
 def test_meta():
-    """Test the meta command (unimplemented)."""
-    result = run_cli(["meta", str(CSV_FILE)], expected_exit_code=1, check=False)
-    assert "not implemented" in result.stderr.lower()
+    """Test the meta command."""
+    result = run_cli(["meta", str(CSV_FILE)])
+    # Should succeed and print JSON schema
+    assert result.returncode == 0
+    stdout = result.stdout.strip()
+    assert stdout.startswith("{") and stdout.endswith("}"), \
+        "Meta command should output JSON schema"
 
 
 def test_schema():

@@ -39,6 +39,19 @@ commands
     to-parquet          Convert one file to Parquet format
 ```
 
+### Examples
+
+```bash
+# View the schema of a CSV file
+omni-morph-cli schema data.csv
+
+# Count records in a Parquet file
+omni-morph-cli count data.parquet
+
+# Convert from one format to another
+omni-morph-cli to-json data.csv output.json
+```
+
 ## Python example usage:
 ```python
 from omni_morph.data import convert, Format
@@ -55,3 +68,30 @@ import pyarrow as pa
 table = pa.table({"x": [1, 2, 3]})
 from omni_morph.data import write
 write(table, Path("my_table.avro"), Format.AVRO)
+
+# Extract schema from a file
+from omni_morph.utils.file_utils import get_schema
+from omni_morph.data.formats import Format
+
+# Automatically detect format from file extension
+schema = get_schema("data.csv")
+
+# Or specify format explicitly
+schema = get_schema("data.file", fmt=Format.CSV)
+```
+
+## Supported File Formats
+
+- CSV (.csv)
+- JSON (.json)
+- Avro (.avro)
+- Parquet (.parquet)
+
+## Schema Inference
+
+OmniMorph provides robust schema inference for all supported file formats:
+
+- CSV: Custom inference engine that samples rows to determine column types
+- JSON: Uses jsonschema-extractor to generate JSON Schema
+- Avro: Extracts embedded schema
+- Parquet: Extracts embedded schema

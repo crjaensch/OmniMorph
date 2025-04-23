@@ -1,7 +1,8 @@
 import logging
 from pathlib import Path
 import importlib.metadata
-
+import json
+from omni_morph.data.converter import read, convert, Format
 import typer
 from omni_morph.data.converter import read, convert, Format
 
@@ -44,8 +45,14 @@ def tail(file_path: Path = typer.Argument(..., help="Path to a file"),
 
 @app.command()
 def meta(file_path: Path = typer.Argument(..., help="Path to a file")):
-    typer.echo("meta command not implemented", err=True)
-    raise typer.Exit(code=1)
+    try:
+        # Import here to avoid import errors for other commands
+        from omni_morph.utils.file_utils import get_schema
+        schema = get_schema(str(file_path))
+        typer.echo(json.dumps(schema, indent=2))
+    except Exception as e:
+        typer.echo(f"Error extracting schema: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def schema(file_path: Path = typer.Argument(..., help="Path to a file")):
