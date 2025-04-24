@@ -39,7 +39,7 @@ Options:
 
 Commands:
   head           Print the first N records from a file.
-  merge          Merge multiple files of the same or different formats...
+  merge          (WIP) Merge multiple files of the same or different formats...
   meta           Print the metadata of a file 
                  (JSON response with keys: file_size, created, modified, encoding, num_records, format).
   random-sample  Randomly sample records from a file.
@@ -50,7 +50,7 @@ Commands:
   to-csv         Convert one file to CSV format.
   to-json        Convert one file to JSON format.
   to-parquet     Convert one file to Parquet format.
-  validate       Validate a file against a schema.
+  validate       (WIP) Validate a file against a schema.
 ```
 
 ### Examples
