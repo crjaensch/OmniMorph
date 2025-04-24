@@ -1,6 +1,10 @@
 # OmniMorph
 Transform, inspect, and merge data files with a single command-line Swiss Army knife for data engineers
 
+<p align="left">
+  <img src="assets/omnimorph-logo.png" alt="OmniMorph Logo" width="500"/>
+</p>
+
 ## Installation
 
 ```bash
