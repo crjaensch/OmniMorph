@@ -1,0 +1,296 @@
+{
+  "id": {
+    "type": "numeric",
+    "count": 1000,
+    "min": 1,
+    "max": 1000,
+    "mean": 500.5,
+    "median": null
+  },
+  "salary": {
+    "type": "numeric",
+    "count": 932,
+    "min": 12380.49,
+    "max": 286592.99,
+    "mean": 149005.35665236058,
+    "median": null
+  },
+  "registration_dttm": {
+    "type": "categorical",
+    "distinct": 995,
+    "top5": [
+      {
+        "value": "2016-02-03 00:33:25",
+        "count": 2
+      },
+      {
+        "value": "2016-02-03 17:07:31",
+        "count": 2
+      },
+      {
+        "value": "2016-02-03 00:36:46",
+        "count": 2
+      },
+      {
+        "value": "2016-02-03 10:35:23",
+        "count": 2
+      },
+      {
+        "value": "2016-02-03 10:07:00",
+        "count": 2
+      }
+    ]
+  },
+  "first_name": {
+    "type": "categorical",
+    "distinct": 198,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 16
+      },
+      {
+        "value": "Samuel",
+        "count": 11
+      },
+      {
+        "value": "Peter",
+        "count": 11
+      },
+      {
+        "value": "Mark",
+        "count": 11
+      },
+      {
+        "value": "Stephen",
+        "count": 10
+      }
+    ]
+  },
+  "last_name": {
+    "type": "categorical",
+    "distinct": 247,
+    "top5": [
+      {
+        "value": "Barnes",
+        "count": 10
+      },
+      {
+        "value": "Willis",
+        "count": 9
+      },
+      {
+        "value": "Shaw",
+        "count": 9
+      },
+      {
+        "value": "Patterson",
+        "count": 9
+      },
+      {
+        "value": "Lane",
+        "count": 8
+      }
+    ]
+  },
+  "email": {
+    "type": "categorical",
+    "distinct": 985,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 16
+      },
+      {
+        "value": "ajordan0@com.com",
+        "count": 1
+      },
+      {
+        "value": "afreeman1@is.gd",
+        "count": 1
+      },
+      {
+        "value": "emorgan2@altervista.org",
+        "count": 1
+      },
+      {
+        "value": "driley3@gmpg.org",
+        "count": 1
+      }
+    ]
+  },
+  "gender": {
+    "type": "categorical",
+    "distinct": 3,
+    "top5": [
+      {
+        "value": "Female",
+        "count": 482
+      },
+      {
+        "value": "Male",
+        "count": 451
+      },
+      {
+        "value": "__NULL__",
+        "count": 67
+      }
+    ]
+  },
+  "ip_address": {
+    "type": "categorical",
+    "distinct": 1000,
+    "top5": [
+      {
+        "value": "1.197.201.2",
+        "count": 1
+      },
+      {
+        "value": "218.111.175.34",
+        "count": 1
+      },
+      {
+        "value": "7.161.136.94",
+        "count": 1
+      },
+      {
+        "value": "140.35.109.83",
+        "count": 1
+      },
+      {
+        "value": "169.113.235.40",
+        "count": 1
+      }
+    ]
+  },
+  "cc": {
+    "type": "categorical",
+    "distinct": 710,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 291
+      },
+      {
+        "value": "6759521864920116",
+        "count": 1
+      },
+      {
+        "value": "6767119071901597",
+        "count": 1
+      },
+      {
+        "value": "3576031598965625",
+        "count": 1
+      },
+      {
+        "value": "5602256255204850",
+        "count": 1
+      }
+    ]
+  },
+  "country": {
+    "type": "categorical",
+    "distinct": 120,
+    "top5": [
+      {
+        "value": "China",
+        "count": 189
+      },
+      {
+        "value": "Indonesia",
+        "count": 97
+      },
+      {
+        "value": "Russia",
+        "count": 62
+      },
+      {
+        "value": "Philippines",
+        "count": 45
+      },
+      {
+        "value": "Portugal",
+        "count": 38
+      }
+    ]
+  },
+  "birthdate": {
+    "type": "categorical",
+    "distinct": 788,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 197
+      },
+      {
+        "value": "1/28/1997",
+        "count": 2
+      },
+      {
+        "value": "7/21/1986",
+        "count": 2
+      },
+      {
+        "value": "4/10/1965",
+        "count": 2
+      },
+      {
+        "value": "11/18/1958",
+        "count": 2
+      }
+    ]
+  },
+  "title": {
+    "type": "categorical",
+    "distinct": 182,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 197
+      },
+      {
+        "value": "Electrical Engineer",
+        "count": 15
+      },
+      {
+        "value": "Structural Analysis Engineer",
+        "count": 13
+      },
+      {
+        "value": "Senior Cost Accountant",
+        "count": 12
+      },
+      {
+        "value": "Senior Sales Associate",
+        "count": 12
+      }
+    ]
+  },
+  "comments": {
+    "type": "categorical",
+    "distinct": 84,
+    "top5": [
+      {
+        "value": "__NULL__",
+        "count": 817
+      },
+      {
+        "value": "1E+02",
+        "count": 5
+      },
+      {
+        "value": "\u2764\ufe0f \ud83d\udc94 \ud83d\udc8c \ud83d\udc95 \ud83d\udc9e \ud83d\udc93 \ud83d\udc97 \ud83d\udc96 \ud83d\udc98 \ud83d\udc9d \ud83d\udc9f \ud83d\udc9c \ud83d\udc9b \ud83d\udc9a \ud83d\udc99",
+        "count": 5
+      },
+      {
+        "value": "../../../../../../../../../../../etc/hosts",
+        "count": 5
+      },
+      {
+        "value": "<script>alert('hi')</script>",
+        "count": 4
+      }
+    ]
+  }
+}
