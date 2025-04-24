@@ -5,7 +5,7 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
   <img src="assets/omnimorph-logo.png" alt="OmniMorph Logo" width="500"/>
 </p>
 
-## Installation
+## Installation (WIP)
 
 ```bash
 # Install using Poetry (recommended)
@@ -18,7 +18,7 @@ pip install omni_morph
 ## Usage
 
 ```bash
-omo-cli --help
+poetry run omo-cli --help
 ```
 
 ```text
