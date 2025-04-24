@@ -6,13 +6,33 @@ Supports Parquet, Avro, JSON, and CSV formats.
 """
 
 import json
+from json import JSONDecodeError
 from pathlib import Path
 from omni_morph.data.formats import Format
 from omni_morph.utils._csv_schema import infer_csv_schema
 
 import pyarrow.parquet as pq
 import fastavro
-from jsonschema_extractor import extract as jsonschema_extract
+from genson import SchemaBuilder
+
+def _infer_json_schema(filepath: str):
+    """
+    Infer JSON schema: handles both JSON and JSONL (first record) using GenSON.
+    """
+    builder = SchemaBuilder()
+    with open(filepath, 'r', encoding='utf-8') as f:
+        try:
+            data = json.load(f)
+        except JSONDecodeError:
+            f.seek(0)
+            for line in f:
+                if line.strip():
+                    data = json.loads(line)
+                    break
+            else:
+                raise ValueError(f"No JSON records found in {filepath}")
+    builder.add_object(data)
+    return builder.to_schema()
 
 def get_schema(filepath: str, fmt: Format = None):
     """
@@ -45,9 +65,7 @@ def get_schema(filepath: str, fmt: Format = None):
             schema_dict = reader.schema
         return json.dumps(schema_dict)
     if resolved_fmt == Format.JSON:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return jsonschema_extract(data)
+        return _infer_json_schema(filepath)
     if resolved_fmt == Format.CSV:
         try:
             return infer_csv_schema(filepath)
