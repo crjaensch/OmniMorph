@@ -64,13 +64,13 @@ class _Operation(str, Enum):
 # ---------------------------------------------------------------------------
 
 def head(
-    path: str,
+    path: Union[str, Path],
     n: int,
     fmt: Optional[Format] = None,
     *,
     return_type: Literal["arrow", "pandas"] = "arrow",
     small_file_threshold: int = 100 * 1024 * 1024,  # 100 MB
-) -> pa.Table | pd.DataFrame:
+) -> Union[pa.Table, pd.DataFrame]:
     """
     Return the first n records from a file.
     
@@ -79,7 +79,7 @@ def head(
     specified or inferred from the file extension.
     
     Args:
-        path: A string pointing to the file to read.
+        path: A string or Path object pointing to the file to read.
         n: Number of records to return from the beginning of the file.
         fmt: Optional format specification. If None, the format is inferred
              from the file extension.
@@ -96,7 +96,7 @@ def head(
         ExtractError: If an error occurs during extraction.
     """
     return _extract_records(
-        path,
+        str(path),  # Convert Path to str for internal functions
         n,
         _Operation.HEAD,
         fmt=fmt,
@@ -106,13 +106,13 @@ def head(
 
 
 def tail(
-    path: str,
+    path: Union[str, Path],
     n: int,
     fmt: Optional[Format] = None,
     *,
     return_type: Literal["arrow", "pandas"] = "arrow",
     small_file_threshold: int = 100 * 1024 * 1024,  # 100 MB
-) -> pa.Table | pd.DataFrame:
+) -> Union[pa.Table, pd.DataFrame]:
     """
     Return the last n records from a file.
     
@@ -121,7 +121,7 @@ def tail(
     specified or inferred from the file extension.
     
     Args:
-        path: A string pointing to the file to read.
+        path: A string or Path object pointing to the file to read.
         n: Number of records to return from the end of the file.
         fmt: Optional format specification. If None, the format is inferred
              from the file extension.
@@ -138,7 +138,7 @@ def tail(
         ExtractError: If an error occurs during extraction.
     """
     return _extract_records(
-        path,
+        str(path),  # Convert Path to str for internal functions
         n,
         _Operation.TAIL,
         fmt=fmt,
@@ -151,7 +151,7 @@ def tail(
 # ---------------------------------------------------------------------------
 
 def sample(
-    path: str,
+    path: Union[str, Path],
     *,
     n: Optional[int] = None,
     fraction: Optional[float] = None,
@@ -168,7 +168,7 @@ def sample(
     Exactly one of `n` or `fraction` must be supplied.
     
     Args:
-        path: A string pointing to the source file (.parquet/.avro/.jsonl/.csv).
+        path: A string or Path object pointing to the source file (.parquet/.avro/.jsonl/.csv).
         n: Optional number of records to sample. If provided, exactly this many
            records will be returned (unless the file contains fewer records).
         fraction: Optional probability (0,1] of keeping each record. Results in
@@ -196,27 +196,30 @@ def sample(
     if (n is None) == (fraction is None):   # xor check
         raise ValueError("Specify exactly one of `n` or `fraction`.")
 
+    # Convert path to string for internal functions
+    path_str = str(path)
+
     rng = random.Random(seed)
-    resolved_fmt = fmt or Format.from_path(path)
+    resolved_fmt = fmt or Format.from_path(path_str)
 
     try:
         if resolved_fmt is Format.PARQUET:
             table = parquet_sample(
-                path, n, fraction, rng, with_replacement, small_file_threshold
+                path_str, n, fraction, rng, with_replacement, small_file_threshold
             )
         elif resolved_fmt is Format.AVRO:
             table = streaming_sample(
-                iter_avro(path), n, fraction, rng, with_replacement,
+                iter_avro(path_str), n, fraction, rng, with_replacement,
                 small_file_threshold
             )
         elif resolved_fmt is Format.JSON:
             table = streaming_sample(
-                iter_jsonl(path), n, fraction, rng, with_replacement,
+                iter_jsonl(path_str), n, fraction, rng, with_replacement,
                 small_file_threshold
             )
         elif resolved_fmt is Format.CSV:
             table = streaming_sample(
-                iter_csv(path), n, fraction, rng, with_replacement,
+                iter_csv(path_str), n, fraction, rng, with_replacement,
                 small_file_threshold
             )
         else:

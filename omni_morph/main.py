@@ -4,6 +4,7 @@ import importlib.metadata
 import json
 from omni_morph.data.converter import read, convert, Format, write
 from omni_morph.data.extractor import head as extract_head, tail as extract_tail, sample as extract_sample
+from omni_morph.data.statistics import get_stats
 import typer
 
 DEFAULT_RECORDS = 20
@@ -84,12 +85,35 @@ def schema(file_path: Path = typer.Argument(..., help="Path to the input file"))
         raise typer.Exit(code=1)
 
 @app.command()
-def stats(file_path: Path = typer.Argument(..., help="Path to the input file")):
+def stats(
+    file_path: Path = typer.Argument(..., help="Path to the input file"),
+    columns: list[str] = typer.Option(None, "--columns", "-c", help="Specific columns to analyze"),
+    format: str = typer.Option(None, "--format", "-f", help="Force specific format (avro, parquet, csv, json)"),
+    sample_size: int = typer.Option(2048, "--sample-size", help="Number of samples for t-digest reservoir per column"),
+):
     """
-    Print statistics about a file.
+    Print statistics about a file's columns.
+    
+    For numeric columns: min, max, mean, and approximate median.
+    For categorical columns: distinct count and top 5 values.
     """
-    typer.echo("stats command not implemented", err=True)
-    raise typer.Exit(code=1)
+    try:
+        # Convert format string to Format enum if provided
+        fmt = Format(format) if format else None
+        
+        # Get statistics for the file
+        stats_result = get_stats(
+            path=file_path,
+            fmt=fmt,
+            columns=columns,
+            sample_size=sample_size
+        )
+        
+        # Output the results as JSON
+        typer.echo(json.dumps(stats_result, indent=2, default=str))
+    except Exception as e:
+        typer.echo(f"Error computing statistics: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def validate(file_path: Path = typer.Argument(..., help="Path to the input file"),

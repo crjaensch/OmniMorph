@@ -163,10 +163,19 @@ def test_schema(file_path):
     assert isinstance(data, dict) and data, "Schema output should be a non-empty dict"
 
 def test_stats():
-    """Test the stats command (unimplemented)."""
-    result = run_cli(["stats", str(CSV_FILE)], expected_exit_code=1, check=False)
-    assert "not implemented" in result.stderr.lower()
-
+    """Test the stats command."""
+    result = run_cli(["stats", str(CSV_FILE)])
+    assert result.returncode == 0
+    
+    # Verify the output is valid JSON
+    try:
+        stats_data = json.loads(result.stdout)
+        # Check that it contains statistics for at least one column
+        assert len(stats_data) > 0
+        # Check that at least one column has type information
+        assert any("type" in col_stats for col_stats in stats_data.values())
+    except json.JSONDecodeError:
+        pytest.fail("Stats command did not return valid JSON")
 
 def test_validate():
     """Test the validate command (unimplemented)."""

@@ -59,6 +59,18 @@ Commands:
 # View the schema of a CSV file
 omo-cli schema data.csv
 
+# Get statistics about columns in a file
+omo-cli stats data.csv
+
+# Analyze specific columns only
+omo-cli stats data.parquet --columns col1 col2 col3
+
+# Force a specific format
+omo-cli stats data.txt --format csv
+
+# Adjust the sample size for t-digest median approximation
+omo-cli stats large_data.parquet --sample-size 5000
+
 # Convert from one format to another
 omo-cli to-json data.csv output.json
 
@@ -72,7 +84,7 @@ omo-cli meta data.csv
 
 ## Python example usage:
 ```python
-from omni_morph.data import convert, Format, head, tail, sample
+from omni_morph.data import convert, Format, head, tail, sample, get_stats
 
 # one-liner convenience
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
@@ -86,6 +98,20 @@ last_records = tail("data.parquet", 5, return_type="pandas")  # Get last 5 recor
 # Random sampling of records
 sample_n = sample("data.csv", n=50, seed=42)        # Sample exactly 50 records
 sample_frac = sample("data.parquet", fraction=0.1)  # Sample approximately 10% of records
+
+# Get column statistics from files
+stats = get_stats("data.csv")                       # Get stats for all columns
+stats = get_stats("data.parquet", columns=["col1", "col2"])  # Get stats for specific columns
+stats = get_stats("data.txt", fmt=Format.CSV)       # Force a specific format
+stats = get_stats("large_data.parquet", sample_size=5000)  # Adjust t-digest sample size
+
+# Numeric columns include: min, max, mean, median
+print(f"Mean of col1: {stats['col1']['mean']}")
+print(f"Median of col1: {stats['col1']['median']}")
+
+# Categorical columns include: distinct count, top values
+print(f"Distinct values in col2: {stats['col2']['distinct_count']}")
+print(f"Most common value: {stats['col2']['top_values'][0][0]}")
 
 # or the enum-based flavour (handy for in-memory tables)
 from pathlib import Path
@@ -118,8 +144,9 @@ OmniMorph is optimized for processing very large data files:
 
 - **Parquet Files**: Memory-efficient processing for files >10GB using intelligent row group handling
 - **Avro Files**: Two-pass sampling approach for files >1GB that maintains constant memory usage
+- **Statistics Computation**: The `get_stats()` function processes files in chunks, maintaining constant memory usage even for very large files
 
-These optimizations apply to both the `tail()` and `sample()` functions (and their CLI counterparts), making OmniMorph suitable for working with datasets in the 10-100GB range without running out of memory.
+These optimizations apply to the `tail()`, `sample()`, and `get_stats()` functions (and their CLI counterparts), making OmniMorph suitable for working with datasets in the 10-100GB range without running out of memory.
 
 ## Schema Inference
 
