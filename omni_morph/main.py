@@ -61,8 +61,13 @@ def meta(file_path: Path = typer.Argument(..., help="Path to the input file")):
     """
     Print the metadata of a file.
     """
-    typer.echo("meta command not implemented", err=True)
-    raise typer.Exit(code=1)
+    try:
+        from omni_morph.utils.file_utils import get_metadata
+        metadata = get_metadata(str(file_path))
+        typer.echo(json.dumps(metadata, default=str, indent=2))
+    except Exception as e:
+        typer.echo(f"Error extracting metadata: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def schema(file_path: Path = typer.Argument(..., help="Path to the input file")):
@@ -103,14 +108,6 @@ def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
     """
     typer.echo("merge command not implemented", err=True)
     raise typer.Exit(code=1)
-
-@app.command()
-def count(file_path: Path = typer.Argument(..., help="Path to the input file")):
-    """
-    Count the number of records in a file.
-    """
-    table = read(file_path)
-    typer.echo(table.num_rows)
 
 @app.command()
 def to_json(file_path: Path = typer.Argument(..., help="Path to the input file"),

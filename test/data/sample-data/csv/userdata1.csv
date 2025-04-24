@@ -516,7 +516,7 @@ registration_dttm,id,first_name,last_name,email,gender,ip_address,cc,country,bir
 2016-02-03T23:00:26Z,515,Benjamin,Lane,blaneea@1und1.de,Male,101.1.168.216,,Germany,,186069.11,,
 2016-02-03T02:49:25Z,516,Kimberly,Lane,klaneeb@marketwatch.com,Female,117.231.221.205,4175002677074749,Ireland,10/24/1965,132126.11,Actuary,❤️ 💔 💌 💕 💞 💓 💗 💖 💘 💝 💟 💜 💛 💚 💙
 2016-02-03T08:36:56Z,517,Kathy,Martinez,kmartinezec@joomla.org,Female,207.150.250.71,3550565192563989,China,9/24/1978,238683.97,Product Engineer,
-2016-02-03T20:48:56Z,518,Sandra,Martinez,smartinezed@princeton.edu,Female,237.97.203.108,3533234668569531,China,,284062.49,, test 
+2016-02-03T20:48:56Z,518,Sandra,Martinez,smartinezed@princeton.edu,Female,237.97.203.108,3533234668569531,China,,284062.49,,test
 2016-02-03T11:10:26Z,519,,Martinez,,Female,8.47.142.129,675921308211666955,Philippines,12/23/1963,95138.05,Web Developer I,
 2016-02-03T02:02:45Z,520,Douglas,Scott,dscottef@hhs.gov,Male,153.253.201.168,4881358729431021,Aland Islands,9/1/1977,259912.24,Account Executive,
 2016-02-03T00:16:04Z,521,Roy,Palmer,rpalmereg@nsw.gov.au,Male,255.242.77.68,3589146577885209,Nepal,8/28/1964,262816.87,Software Test Engineer IV,
@@ -862,7 +862,7 @@ registration_dttm,id,first_name,last_name,email,gender,ip_address,cc,country,bir
 2016-02-03T07:14:42Z,861,Margaret,Johnston,mjohnstonnw@bigcartel.com,Female,177.238.174.233,5610209097302325,Russia,5/11/1962,265408.34,Junior Executive,
 2016-02-03T13:10:40Z,862,Paul,Garcia,pgarcianx@redcross.org,Male,11.7.198.75,3535401676896556,Portugal,1/25/2000,91249.0,Senior Quality Engineer,
 2016-02-03T16:56:36Z,863,Chris,Perkins,cperkinsny@oakley.com,Male,210.62.101.205,5447798966159948,Sweden,6/25/1974,241650.17,Dental Hygienist,
-2016-02-03T23:26:00Z,864,Gerald,Hill,ghillnz@e-recht24.de,,127.204.162.115,5893880849559798,Russia,,,, test 
+2016-02-03T23:26:00Z,864,Gerald,Hill,ghillnz@e-recht24.de,,127.204.162.115,5893880849559798,Russia,,,,test
 2016-02-03T15:00:52Z,865,,Cole,,Male,4.17.85.44,374288089806219,Indonesia,,92768.07,,
 2016-02-03T18:04:35Z,866,Terry,Burns,tburnso1@csmonitor.com,Male,193.230.72.145,3569957955149669,Indonesia,6/24/1980,158751.06,Senior Developer,
 2016-02-03T16:59:28Z,867,Chris,Alexander,calexandero2@4shared.com,Male,230.224.130.37,,China,5/22/1979,170605.29,Physical Therapy Assistant,

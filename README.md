@@ -38,10 +38,10 @@ Options:
   --help                          Show this message and exit.
 
 Commands:
-  count          Count the number of records in a file.
   head           Print the first N records from a file.
   merge          Merge multiple files of the same or different formats...
-  meta           Print the metadata of a file.
+  meta           Print the metadata of a file 
+                 (JSON response with keys: file_size, created, modified, encoding, num_records, format).
   random-sample  Randomly sample records from a file.
   schema         Print the schema for a file.
   stats          Print statistics about a file.
@@ -59,15 +59,15 @@ Commands:
 # View the schema of a CSV file
 omo-cli schema data.csv
 
-# Count records in a Parquet file
-omo-cli count data.parquet
-
 # Convert from one format to another
 omo-cli to-json data.csv output.json
 
 # Randomly sample records from a file
 omo-cli random-sample data.csv --n 50 --seed 42
 omo-cli random-sample data.parquet --fraction 0.1
+
+# View file metadata
+omo-cli meta data.csv
 ```
 
 ## Python example usage:

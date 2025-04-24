@@ -1,5 +1,6 @@
 import subprocess
 import tempfile
+import json
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,8 @@ TEST_DATA_DIR = Path(__file__).parent.parent / "data"
 # Sample files for testing
 CSV_FILE = TEST_DATA_DIR / "sample-data" / "csv" / "userdata1.csv"
 JSON_FILE = TEST_DATA_DIR / "sample-data" / "json" / "books1.json"
-AVRO_FILE = TEST_DATA_DIR / "avro" / "test.avro"
-PARQUET_FILE = TEST_DATA_DIR / "parquet" / "test.parquet"
+AVRO_FILE = TEST_DATA_DIR / "sample-data" / "avro" / "userdata1.avro"
+PARQUET_FILE = TEST_DATA_DIR / "sample-data" / "parquet" / "userdata1.parquet"
 SCHEMA_FILE = TEST_DATA_DIR / "schema_valid.avsc"
 
 # Command to run the CLI
@@ -47,21 +48,22 @@ def test_version():
 
 def test_verbose():
     """Test the --verbose option."""
-    result = run_cli(["--verbose", "count", str(CSV_FILE)])
+    result = run_cli(["--verbose", "meta", str(CSV_FILE)])
     assert result.returncode == 0
 
 
 def test_debug():
     """Test the --debug option."""
-    result = run_cli(["--debug", "count", str(CSV_FILE)])
+    result = run_cli(["--debug", "meta", str(CSV_FILE)])
     assert result.returncode == 0
 
 
 # Test implemented commands
-def test_head():
-    """Test the head command."""
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_head(file_path):
+    """Test the head command for all formats."""
     # Test with default number of records
-    result = run_cli(["head", str(CSV_FILE)])
+    result = run_cli(["head", str(file_path)])
     assert result.returncode == 0
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
@@ -71,7 +73,7 @@ def test_head():
     assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
 
     # Test with custom number of records
-    result = run_cli(["head", str(CSV_FILE), "-n", "5"])
+    result = run_cli(["head", str(file_path), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
@@ -82,10 +84,11 @@ def test_head():
     assert "Error:" in result.stderr
 
 
-def test_tail():
-    """Test the tail command."""
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_tail(file_path):
+    """Test the tail command for all formats."""
     # Test with default number of records
-    result = run_cli(["tail", str(CSV_FILE)])
+    result = run_cli(["tail", str(file_path)])
     assert result.returncode == 0
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
@@ -95,7 +98,7 @@ def test_tail():
     assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
 
     # Test with custom number of records
-    result = run_cli(["tail", str(CSV_FILE), "-n", "5"])
+    result = run_cli(["tail", str(file_path), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
@@ -104,15 +107,6 @@ def test_tail():
     result = run_cli(["tail", "nonexistent.csv"], expected_exit_code=1, check=False)
     assert result.returncode == 1
     assert "Error:" in result.stderr
-
-
-def test_count():
-    """Test the count command."""
-    result = run_cli(["count", str(CSV_FILE)])
-    assert result.returncode == 0
-    # The count should be a positive integer
-    count = int(result.stdout.strip())
-    assert count > 0
 
 
 # Test conversion commands - these may fail due to data format issues
@@ -150,19 +144,23 @@ def test_conversion_commands():
 
 
 # Test unimplemented commands - they should fail with exit code 1
-def test_meta():
-    """Test the meta command (unimplemented)."""
-    result = run_cli(["meta", str(CSV_FILE)], expected_exit_code=1, check=False)
-    assert "not implemented" in result.stderr.lower()
-
-def test_schema():
-    """Test the schema command."""
-    result = run_cli(["schema", str(CSV_FILE)])
-    # Should succeed and print CSV schema
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_meta(file_path):
+    """Test the meta command for all formats."""
+    result = run_cli(["meta", str(file_path)])
     assert result.returncode == 0
     stdout = result.stdout.strip()
-    assert stdout.startswith("{") and stdout.endswith("}"), \
-        "Schema command should output CSV schema"
+    data = json.loads(stdout)
+    for key in ("file_size", "created", "modified", "encoding", "num_records", "format"):
+        assert key in data
+
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_schema(file_path):
+    """Test the schema command for CSV, Parquet, Avro, and JSON files."""
+    result = run_cli(["schema", str(file_path)])
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, dict) and data, "Schema output should be a non-empty dict"
 
 def test_stats():
     """Test the stats command (unimplemented)."""
@@ -196,14 +194,15 @@ def test_merge():
         assert "not implemented" in result.stderr.lower()
 
 
-def test_random_sample():
-    """Test the random-sample command."""
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_random_sample(file_path):
+    """Test the random-sample command for all formats."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / "sample.csv"
         
         # Test with n parameter
         result = run_cli(
-            ["random-sample", str(CSV_FILE), str(output_path), "--n", "10"],
+            ["random-sample", str(file_path), str(output_path), "--n", "10"],
             check=False
         )
         assert result.returncode == 0, f"Command failed with error: {result.stderr}"
@@ -214,24 +213,30 @@ def test_random_sample():
         # Test with fraction parameter
         output_path2 = Path(tmpdir) / "sample_fraction.csv"
         result = run_cli(
-            ["random-sample", str(CSV_FILE), str(output_path2), "--fraction", "0.1"],
+            ["random-sample", str(file_path), str(output_path2), "--fraction", "0.1"],
             check=False
         )
         assert result.returncode == 0, f"Command failed with error: {result.stderr}"
         assert output_path2.exists(), "Output file was not created"
         assert output_path2.stat().st_size > 0, "Output file is empty"
-        
-        # Test with invalid parameters (neither n nor fraction)
-        output_path3 = Path(tmpdir) / "sample_invalid.csv"
+
+
+def test_random_sample_invalid_params():
+    """Test random-sample fails when neither n nor fraction is specified."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / "sample_invalid.csv"
         result = run_cli(
-            ["random-sample", str(CSV_FILE), str(output_path3)],
+            ["random-sample", str(CSV_FILE), str(output_path)],
             expected_exit_code=1,
             check=False
         )
         assert result.returncode == 1
         assert "Error:" in result.stderr
-        
-        # Test with non-existent file
+
+def test_random_sample_nonexistent_file():
+    """Test random-sample with non-existent input file fails."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / "out.csv"
         result = run_cli(
             ["random-sample", "nonexistent.csv", str(output_path)],
             expected_exit_code=1,

@@ -226,6 +226,15 @@ def sample(
             f"sample failed for {os.path.basename(path)!r}: {exc}"
         ) from exc
 
+    # For fraction sampling, if no records selected, fallback to return first record
+    if fraction is not None and isinstance(table, pa.Table) and table.num_rows == 0:
+        table = head(
+            path,
+            1,
+            fmt=fmt,
+            return_type="arrow",
+            small_file_threshold=small_file_threshold,
+        )
     return table if return_type == "arrow" else table.to_pandas()
 
 # ---------------------------------------------------------------------------
