@@ -14,11 +14,11 @@ pip install omni_morph
 ## Usage
 
 ```bash
-omni-morph-cli --help
+omo-cli --help
 ```
 
 ```text
-Usage: omni-morph-cli [OPTIONS] COMMAND [ARGS]...
+Usage: omo-cli [OPTIONS] COMMAND [ARGS]...
 
   Transform, inspect, and merge data files with a single command-line tool
 
@@ -53,17 +53,17 @@ Commands:
 
 ```bash
 # View the schema of a CSV file
-omni-morph-cli schema data.csv
+omo-cli schema data.csv
 
 # Count records in a Parquet file
-omni-morph-cli count data.parquet
+omo-cli count data.parquet
 
 # Convert from one format to another
-omni-morph-cli to-json data.csv output.json
+omo-cli to-json data.csv output.json
 
 # Randomly sample records from a file
-omni-morph-cli random-sample data.csv --n 50 --seed 42
-omni-morph-cli random-sample data.parquet --fraction 0.1
+omo-cli random-sample data.csv --n 50 --seed 42
+omo-cli random-sample data.parquet --fraction 0.1
 ```
 
 ## Python example usage:

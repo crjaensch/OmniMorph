@@ -15,7 +15,7 @@ PARQUET_FILE = TEST_DATA_DIR / "parquet" / "test.parquet"
 SCHEMA_FILE = TEST_DATA_DIR / "schema_valid.avsc"
 
 # Command to run the CLI
-CLI_CMD = ["poetry", "run", "omni-morph-cli"]
+CLI_CMD = ["poetry", "run", "omo-cli"]
 
 
 def run_cli(args, expected_exit_code=0, check=True):
