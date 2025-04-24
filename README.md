@@ -126,6 +126,6 @@ These optimizations apply to both the `tail()` and `sample()` functions (and the
 OmniMorph provides robust schema inference for all supported file formats:
 
 - CSV: Custom inference engine that samples rows to determine column types
-- JSON: Uses jsonschema-extractor to generate JSON Schema
+- JSON: Uses GenSON to generate JSON Schema
 - Avro: Extracts embedded schema
 - Parquet: Extracts embedded schema
