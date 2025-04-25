@@ -163,3 +163,6 @@ dmypy.json
 
 # PyPI configuration file
 .pypirc
+
+# MacOS specific files
+.DS_Store
