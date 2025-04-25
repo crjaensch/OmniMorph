@@ -133,7 +133,9 @@ def validate(file_path: Path = typer.Argument(..., help="Path to the input file"
 
 @app.command()
 def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
-          output_path: Path = typer.Argument(..., help="Output file path")):
+          output_path: Path = typer.Argument(..., help="Output file path"),
+          allow_cast: bool = typer.Option(True, "--allow-cast/--no-cast", help="Allow automatic casting between compatible types"),
+          progress: bool = typer.Option(False, "--progress", "-p", help="Show progress during merge")):
     """
     Merge multiple files of the same or different formats into one.
     """
@@ -149,7 +151,8 @@ def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
             sources=source_files,
             output_path=str(output_path),
             output_fmt=output_fmt,
-            progress=True
+            allow_cast=allow_cast,
+            progress=progress
         )
         
         typer.echo(f"Files merged successfully to {output_path}")
