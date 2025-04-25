@@ -8,6 +8,8 @@ packages = [{include = "omni_morph"}]
 homepage = "https://github.com/crjaensch/OmniMorph"
 repository = "https://github.com/crjaensch/OmniMorph"
 license = "MIT"
+keywords = ["cli", "data-engineering", "utility"]
+
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"

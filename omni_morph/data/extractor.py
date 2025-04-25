@@ -334,7 +334,11 @@ def _parquet_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
         groups.reverse()
         tables = [pfile.read_row_group(rg) for rg in groups]
         tbl = pa.concat_tables(tables) if tables else pa.table({})
-        return tbl.slice(max(0, len(tbl) - n), n)
+        # If n exceeds the number of rows, return all rows with a warning
+        if n >= len(tbl):
+            print(f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows.")
+            return tbl
+        return tbl.slice(len(tbl) - n, n)
     else:
         # Implementation for smaller files
         rows_needed = n
@@ -347,6 +351,10 @@ def _parquet_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
 
         groups.reverse()
         tbl = pfile.read_row_groups(groups)
+        # If n exceeds the number of rows, return all rows with a warning
+        if n >= len(tbl):
+            print(f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows.")
+            return tbl
         return tbl.slice(len(tbl) - n, n)
 
 
