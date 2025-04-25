@@ -39,7 +39,7 @@ Options:
 
 Commands:
   head           Print the first N records from a file.
-  merge          (WIP) Merge multiple files of the same or different formats...
+  merge          Merge multiple files of the same or different formats...
   meta           Print the metadata of a file 
                  (JSON response with keys: file_size, created, modified, encoding, num_records, format).
   random-sample  Randomly sample records from a file.
@@ -80,16 +80,34 @@ omo-cli random-sample data.parquet --fraction 0.1
 
 # View file metadata
 omo-cli meta data.csv
+
+# Merge multiple files into a single output file
+omo-cli merge file1.csv file2.csv merged_output.csv
+
+# Merge files of different formats (CSV and JSON) into a Parquet file
+omo-cli merge data1.csv data2.json combined_data.parquet
 ```
 
 ## Python example usage:
 ```python
 from omni_morph.data import convert, Format, head, tail, sample, get_stats
+from omni_morph.data.merging import merge_files
+from omni_morph.utils.file_utils import get_schema, get_metadata
+from pathlib import Path
+import pyarrow as pa
 
-# one-liner convenience
+# ===== File Format Conversion =====
+
+# Convert between different file formats
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
 convert("data.parquet", "out/data.csv")             # Parquet → CSV
 convert("records.json", "records_converted.avro")   # JSON   → Avro
+
+# Write PyArrow tables directly
+table = pa.table({"x": [1, 2, 3]})
+write(table, Path("my_table.avro"), Format.AVRO)
+
+# ===== Data Inspection =====
 
 # Extract first/last records from files
 first_records = head("data.csv", 10)                # Get first 10 records as PyArrow Table
@@ -98,6 +116,17 @@ last_records = tail("data.parquet", 5, return_type="pandas")  # Get last 5 recor
 # Random sampling of records
 sample_n = sample("data.csv", n=50, seed=42)        # Sample exactly 50 records
 sample_frac = sample("data.parquet", fraction=0.1)  # Sample approximately 10% of records
+
+# ===== Schema and Metadata =====
+
+# Extract schema from a file
+schema = get_schema("data.csv")                     # Auto-detect format from extension
+schema = get_schema("data.file", fmt=Format.CSV)    # Explicitly specify format
+
+# Get file metadata
+metadata = get_metadata("data.parquet")             # File size, record count, etc.
+
+# ===== Statistical Analysis =====
 
 # Get column statistics from files
 stats = get_stats("data.csv")                       # Get stats for all columns
@@ -113,22 +142,23 @@ print(f"Median of col1: {stats['col1']['median']}")
 print(f"Distinct values in col2: {stats['col2']['distinct_count']}")
 print(f"Most common value: {stats['col2']['top_values'][0][0]}")
 
-# or the enum-based flavour (handy for in-memory tables)
-from pathlib import Path
-import pyarrow as pa
+# ===== File Merging =====
 
-table = pa.table({"x": [1, 2, 3]})
-from omni_morph.data import write
-write(table, Path("my_table.avro"), Format.AVRO)
+# Merge multiple files into a single output file
+merge_files(
+    sources=["file1.csv", "file2.csv", "file3.csv"],
+    output_path="merged_output.csv",
+    progress=True  # Show progress during merge
+)
 
-# Extract schema from a file
-from omni_morph.utils.file_utils import get_schema
-
-# Automatically detect format from file extension
-schema = get_schema("data.csv")
-
-# Or specify format explicitly
-schema = get_schema("data.file", fmt=Format.CSV)
+# Merge files with different schemas (with automatic casting)
+merge_files(
+    sources=["data1.parquet", "data2.avro", "data3.json"],
+    output_path="merged_data.parquet",
+    output_fmt=Format.PARQUET,  # Explicitly specify output format
+    allow_cast=True,  # Enable schema reconciliation
+    chunksize=100_000  # Process in chunks of 100K rows for memory efficiency
+)
 ```
 
 ## Supported File Formats

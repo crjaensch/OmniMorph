@@ -192,15 +192,48 @@ def test_validate():
 
 
 def test_merge():
-    """Test the merge command (unimplemented)."""
+    """Test the merge command."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        output_path = Path(tmpdir) / "merged.csv"
+        # Create a simple CSV file for testing
+        simple_csv1 = Path(tmpdir) / "simple1.csv"
+        with open(simple_csv1, "w") as f:
+            f.write("id,name,value\n")
+            f.write("1,test1,100\n")
+            f.write("2,test2,200\n")
+        
+        simple_csv2 = Path(tmpdir) / "simple2.csv"
+        with open(simple_csv2, "w") as f:
+            f.write("id,name,value\n")
+            f.write("3,test3,300\n")
+            f.write("4,test4,400\n")
+        
+        # Test merging CSV files to CSV
+        csv_output = Path(tmpdir) / "merged.csv"
+        result = run_cli(["merge", str(simple_csv1), str(simple_csv2), str(csv_output)])
+        assert result.returncode == 0
+        assert "Files merged successfully" in result.stdout
+        
+        # Verify the merged file exists and has the correct content
+        assert csv_output.exists()
+        with open(csv_output, "r") as f:
+            content = f.read()
+            # Check if it contains data from both files (should have 4 data rows + header)
+            assert content.count("\n") >= 4
+        
+        # Test merging to different output formats
+        parquet_output = Path(tmpdir) / "merged.parquet"
+        result = run_cli(["merge", str(simple_csv1), str(simple_csv2), str(parquet_output)])
+        assert result.returncode == 0
+        assert parquet_output.exists()
+        
+        # Test error handling with non-existent files
+        nonexistent = Path(tmpdir) / "nonexistent.csv"
         result = run_cli(
-            ["merge", str(CSV_FILE), str(CSV_FILE), str(output_path)],
+            ["merge", str(nonexistent), str(simple_csv1), str(csv_output)],
             expected_exit_code=1,
             check=False
         )
-        assert "not implemented" in result.stderr.lower()
+        assert "Error merging files" in result.stderr
 
 
 @pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])

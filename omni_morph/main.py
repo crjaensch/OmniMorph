@@ -5,6 +5,7 @@ import json
 from omni_morph.data.converter import read, convert, Format, write
 from omni_morph.data.extractor import head as extract_head, tail as extract_tail, sample as extract_sample
 from omni_morph.data.statistics import get_stats
+from omni_morph.data.merging import merge_files
 import typer
 
 DEFAULT_RECORDS = 20
@@ -136,8 +137,25 @@ def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
     """
     Merge multiple files of the same or different formats into one.
     """
-    typer.echo("merge command not implemented", err=True)
-    raise typer.Exit(code=1)
+    try:
+        # Convert Path objects to strings
+        source_files = [str(file) for file in files]
+        
+        # Determine the output format from the file extension
+        output_fmt = Format.from_path(output_path)
+        
+        # Merge the files
+        merge_files(
+            sources=source_files,
+            output_path=str(output_path),
+            output_fmt=output_fmt,
+            progress=True
+        )
+        
+        typer.echo(f"Files merged successfully to {output_path}")
+    except Exception as e:
+        typer.echo(f"Error merging files: {e}", err=True)
+        raise typer.Exit(code=1)
 
 @app.command()
 def to_json(file_path: Path = typer.Argument(..., help="Path to the input file"),
