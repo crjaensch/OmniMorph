@@ -10,10 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-try:
-    from fastdigest import TDigest              # pip install fastdigest
-except ImportError:
-    TDigest = None                              # median≈ fallback
+from fastdigest import TDigest              # Required dependency
 
 try:
     from fastavro import reader as avro_reader  # pip install fastavro
@@ -55,8 +52,12 @@ class _NumAgg:
 
     def finish(self):
         median = None
-        if self.td is not None and self.td.n > 0:
-            median = self.td.quantile(0.5)
+        if self.td is not None and not self.td.is_empty:
+            # Use direct median() method if available, fallback to quantile(0.5)
+            try:
+                median = self.td.median()
+            except AttributeError:
+                median = self.td.quantile(0.5)
         return {
             "count":   self.count,
             "min":     self.minv,
@@ -275,6 +276,19 @@ def _stats_jsonl(
 
 # ---------- shared helpers -------------------------------------------------
 
+def _create_tdigest():
+    """Create a TDigest object with proper error handling.
+    
+    Returns:
+        A TDigest object if creation succeeds, otherwise None.
+    """
+    try:
+        return TDigest()
+    except Exception as e:
+        import warnings
+        warnings.warn(f"Failed to initialize TDigest: {e}. Median approximation will be disabled.")
+        return None
+
 def _stats_from_chunks(
     chunks: Union[pd.DataFrame, List[Dict]],
     cols: Optional[List[str]],
@@ -333,7 +347,7 @@ def _prep_aggs(
         field = schema.field(name) if hasattr(schema, "field") else None
         is_num = (field and _is_numeric_type(field.type))
         if is_num:
-            td = TDigest() if TDigest and sample_size else None
+            td = _create_tdigest() if sample_size > 0 else None
             num_aggs[name] = _NumAgg(td=td)
         else:
             cat_aggs[name] = _CatAgg()
@@ -362,7 +376,7 @@ def _update_aggs_from_dict(
         if cols and k not in cols:
             continue
         if isinstance(v, (int, float)) or v is None:
-            agg = num_aggs.setdefault(k, _NumAgg(td=(TDigest() if TDigest else None)))
+            agg = num_aggs.setdefault(k, _NumAgg(td=_create_tdigest() if sample_size > 0 else None))
             agg.update([v])
         else:
             agg = cat_aggs.setdefault(k, _CatAgg())

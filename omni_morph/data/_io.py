@@ -126,7 +126,7 @@ def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
         with open(path, 'w') as fo:
             import json
             for record in records:
-                fo.write(json.dumps(record) + '\n')
+                fo.write(json.dumps(record, default=str) + '\n')
     
     else:
         raise AssertionError("unreachable")
