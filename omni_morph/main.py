@@ -7,6 +7,7 @@ from omni_morph.data.extractor import head as extract_head, tail as extract_tail
 from omni_morph.data.statistics import get_stats
 from omni_morph.data.merging import merge_files
 import typer
+import pyarrow as pa
 
 DEFAULT_RECORDS = 20
 
@@ -223,6 +224,21 @@ def random_sample(file_path: Path = typer.Argument(..., help="Path to the input 
         
         # Determine the output format from the file extension
         output_fmt = Format.from_path(output_path)
+        
+        # Check for complex types when writing to CSV
+        if output_fmt == Format.CSV:
+            has_complex_types = any(
+                pa.types.is_list(field.type) or 
+                pa.types.is_struct(field.type) or 
+                pa.types.is_map(field.type)
+                for field in table.schema
+            )
+            
+            if has_complex_types:
+                typer.echo("Error: Data contains complex types (lists, maps, or nested structures) "
+                           "that cannot be represented in CSV format.")
+                typer.echo("Please use JSONL, Parquet, or Avro format for output files with complex data types.")
+                raise typer.Exit(code=1)
         
         # Write the table directly to the output file
         write(table, output_path, fmt=output_fmt)

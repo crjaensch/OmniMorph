@@ -38,8 +38,10 @@ def parquet_sample(
             chosen_idx = [rng.randrange(total_rows) for _ in range(n)]
         else:
             if n > total_rows:
-                raise ExtractError("n exceeds number of rows in file.")
-            chosen_idx = rng.sample(range(total_rows), n)
+                print(f"Warning: Requested {n} samples but file only contains {total_rows} rows. Returning all rows.")
+                chosen_idx = list(range(total_rows))
+            else:
+                chosen_idx = rng.sample(range(total_rows), n)
 
     if not chosen_idx:
         return pa.table({})      # empty sample
@@ -94,7 +96,7 @@ def streaming_sample(
     # Cheap size test: if the underlying file is small, load into memory first
     if hasattr(iterator, "__len__") and (getattr(iterator, "_size_bytes", 0) < limit):
         data = list(iterator)
-        return _sample_in_memory(data, n, fraction, rng, replace)
+        return sample_in_memory(data, n, fraction, rng, replace)
 
     # ---- streaming path -----------------------------------------------------
     if replace and n is not None:
@@ -130,8 +132,10 @@ def sample_in_memory(
             sample = [rng.choice(data) for _ in range(n)]
         else:
             if n > len(data):
-                raise ExtractError("n exceeds number of available records.")
-            sample = rng.sample(data, n)
+                print(f"Warning: Requested {n} samples but only {len(data)} records are available. Returning all records.")
+                sample = data.copy()
+            else:
+                sample = rng.sample(data, n)
 
     return pa.Table.from_pylist(sample) if sample else pa.table({})
 
