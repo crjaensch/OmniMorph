@@ -96,6 +96,19 @@ def merge_files(
 # ---------------------------------------------------------------------------
 
 def _reconcile_schema(tbl: pa.Table, target: pa.Schema) -> pa.Table:
+    """
+    Reconcile a table's schema with a target schema by adding missing columns and casting types.
+    
+    Args:
+        tbl: PyArrow Table to reconcile
+        target: Target PyArrow Schema to conform to
+        
+    Returns:
+        PyArrow Table with schema matching the target schema
+        
+    Raises:
+        ExtractError: If column types cannot be cast to target types
+    """
     # add missing cols
     for name in target.names:
         if name not in tbl.schema.names:
@@ -113,6 +126,23 @@ def _reconcile_schema(tbl: pa.Table, target: pa.Schema) -> pa.Table:
     return pa.table(cols, names=target.names)
 
 def _open_writer(path: str, fmt: str, schema: pa.Schema):
+    """
+    Create a format-specific writer function for the given output path and schema.
+    
+    Creates a callable that writes PyArrow Tables to the specified format.
+    The returned callable has a .close() method to properly release resources.
+    
+    Args:
+        path: Output file path
+        fmt: Output format ('parquet', 'avro', 'csv', or 'jsonl')
+        schema: PyArrow Schema for the output file
+        
+    Returns:
+        A callable that accepts a PyArrow Table and writes it to the output file
+        
+    Raises:
+        ImportError: If format-specific dependencies are missing
+    """
     if fmt == "parquet":
         writer = pq.ParquetWriter(path, schema)
         write_func = lambda tbl: writer.write_table(tbl)
@@ -148,6 +178,23 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
         return _write
 
 def _batch_reader(path: str, chunksize: int):
+    """
+    Read data from a file in batches, yielding PyArrow Tables.
+    
+    Handles different file formats (parquet, avro, csv, jsonl) with format-appropriate
+    chunking strategies to maintain bounded memory usage.
+    
+    Args:
+        path: Path to the input file
+        chunksize: Maximum number of rows to load per batch
+        
+    Yields:
+        PyArrow Tables containing batches of data from the input file
+        
+    Raises:
+        ImportError: If format-specific dependencies are missing
+        ExtractError: If the input format is not supported
+    """
     resolved_fmt = Format.from_path(path)
     fmt = "jsonl" if resolved_fmt is Format.JSON else resolved_fmt.name.lower()
     if fmt == "parquet":
