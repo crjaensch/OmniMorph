@@ -63,7 +63,7 @@ omo-cli schema data.csv
 omo-cli stats data.csv
 
 # Analyze specific columns only
-omo-cli stats data.parquet --columns col1 col2 col3
+omo-cli stats data.parquet --columns col1,col2,col3
 
 # Force a specific format
 omo-cli stats data.txt --format csv

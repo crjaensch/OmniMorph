@@ -87,7 +87,7 @@ def schema(file_path: Path = typer.Argument(..., help="Path to the input file"))
 @app.command()
 def stats(
     file_path: Path = typer.Argument(..., help="Path to the input file"),
-    columns: list[str] = typer.Option(None, "--columns", "-c", help="Specific columns to analyze"),
+    columns: str = typer.Option(None, "--columns", "-c", help="Specific columns to analyze (comma-separated)"),
     format: str = typer.Option(None, "--format", "-f", help="Force specific format (avro, parquet, csv, json)"),
     sample_size: int = typer.Option(2048, "--sample-size", help="Number of samples for t-digest reservoir per column"),
 ):
@@ -100,6 +100,12 @@ def stats(
     try:
         # Convert format string to Format enum if provided
         fmt = Format(format) if format else None
+        
+        # Parse comma-separated columns into list
+        if columns:
+            columns = [col.strip() for col in columns.split(",")]
+        else:
+            columns = None
         
         # Get statistics for the file
         stats_result = get_stats(
