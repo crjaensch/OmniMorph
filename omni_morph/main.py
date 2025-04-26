@@ -92,6 +92,7 @@ def stats(
     columns: str = typer.Option(None, "--columns", "-c", help="Specific columns to analyze (comma-separated)"),
     format: str = typer.Option(None, "--format", "-f", help="Force specific format (avro, parquet, csv, json)"),
     sample_size: int = typer.Option(2048, "--sample-size", help="Number of samples for t-digest reservoir per column"),
+    markdown: bool = typer.Option(False, "--markdown", help="Output in markdown format instead of JSON"),
 ):
     """
     Print statistics about a file's columns.
@@ -117,8 +118,13 @@ def stats(
             sample_size=sample_size
         )
         
-        # Output the results as JSON
-        typer.echo(json.dumps(stats_result, indent=2, default=str))
+        # Output the results based on format preference
+        if markdown:
+            from omni_morph.utils.json2md import stats_to_markdown
+            typer.echo(stats_to_markdown(stats_result))
+        else:
+            # Output the results as JSON
+            typer.echo(json.dumps(stats_result, indent=2, default=str))
     except Exception as e:
         typer.echo(f"Error computing statistics: {e}", err=True)
         raise typer.Exit(code=1)

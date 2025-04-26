@@ -177,6 +177,25 @@ def test_stats():
     except json.JSONDecodeError:
         pytest.fail("Stats command did not return valid JSON")
 
+def test_stats_markdown():
+    """Test the stats command with markdown output."""
+    result = run_cli(["stats", str(CSV_FILE), "--markdown"])
+    assert result.returncode == 0
+    
+    # Verify the output contains markdown formatting
+    output = result.stdout
+    assert "# Numeric columns" in output, "Markdown output should contain section headers"
+    assert "|" in output, "Markdown output should contain table formatting"
+    assert "column" in output, "Markdown output should contain column headers"
+    
+    # Make sure it's not JSON
+    try:
+        json.loads(output)
+        pytest.fail("Output should be markdown, not JSON")
+    except json.JSONDecodeError:
+        # This is expected - output should not be valid JSON
+        pass
+
 def test_validate():
     """Test the validate command (unimplemented)."""
     result = run_cli(["validate", str(CSV_FILE)], expected_exit_code=1, check=False)
