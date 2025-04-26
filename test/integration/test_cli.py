@@ -196,20 +196,6 @@ def test_stats_markdown():
         # This is expected - output should not be valid JSON
         pass
 
-def test_validate():
-    """Test the validate command (unimplemented)."""
-    result = run_cli(["validate", str(CSV_FILE)], expected_exit_code=1, check=False)
-    assert "not implemented" in result.stderr.lower()
-
-    # Test with schema path
-    result = run_cli(
-        ["validate", str(CSV_FILE), "--schema-path", str(SCHEMA_FILE)],
-        expected_exit_code=1,
-        check=False
-    )
-    assert "not implemented" in result.stderr.lower()
-
-
 def test_merge():
     """Test the merge command."""
     with tempfile.TemporaryDirectory() as tmpdir:

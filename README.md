@@ -42,6 +42,7 @@ Commands:
   merge          Merge multiple files of the same or different formats...
   meta           Print the metadata of a file 
                  (JSON response with keys: file_size, created, modified, encoding, num_records, format).
+  query          Run SQL queries against data files using DuckDB.
   random-sample  Randomly sample records from a file.
   schema         Print the schema for a file.
   stats          Print statistics about a file.
@@ -50,7 +51,6 @@ Commands:
   to-csv         Convert one file to CSV format.
   to-json        Convert one file to JSON format.
   to-parquet     Convert one file to Parquet format.
-  validate       (WIP) Validate a file against a schema.
 ```
 
 ### Examples
@@ -89,6 +89,13 @@ omo-cli merge file1.csv file2.csv merged_output.csv
 
 # Merge files of different formats (CSV and JSON) into a Parquet file
 omo-cli merge data1.csv data2.json combined_data.parquet
+
+# Run SQL queries against data files
+omo-cli query data.csv "SELECT * FROM data LIMIT 10"
+omo-cli query sales.parquet "SELECT category, SUM(amount) as total FROM sales GROUP BY category ORDER BY total DESC"
+
+# Force a specific format for SQL queries
+omo-cli query data.txt --format csv "SELECT * FROM data WHERE id > 100"
 ```
 
 ## Statistical Analysis Output Example
@@ -118,6 +125,44 @@ Here's an example of the statistics output in markdown format for the sample fil
 | title | 182 | __NULL__ · 197 ; Electrical Engineer · 15 ; Structural Analysis Engineer · 13 ; Senior Cost Accountant · 12 ; Senior Sales Associate · 12 |
 
 This human-readable format makes it easy to quickly understand the characteristics of your data.
+
+## SQL Queries with DuckDB
+
+OmniMorph includes a powerful SQL query engine powered by DuckDB that allows you to run SQL queries directly against data files without needing to set up a database.
+
+### Features
+
+- Run SQL queries against CSV, JSON, Avro, and Parquet files
+- Results displayed as nicely formatted markdown tables
+- Automatic schema inference from data files
+- AI-powered query suggestions when SQL validation fails
+
+### Example
+
+```bash
+# Basic query with limit
+omo-cli query userdata.csv "SELECT id, first_name, last_name FROM userdata LIMIT 5"
+
+# Aggregation query with grouping
+omo-cli query sales.parquet "SELECT category, COUNT(*) as count, SUM(amount) as total FROM sales GROUP BY category"
+```
+
+### AI-Powered SQL Assistance
+
+When you run an invalid SQL query, OmniMorph doesn't just show an error - it uses AI to suggest a corrected query based on the error message and the schema of your data file:
+
+```
+❌ SQL validation failed:
+Catalog Error: Table with name sales_data does not exist!
+
+💡 Suggested fix:
+
+Try using the correct table name. The file's stem is used as the table name:
+
+SELECT * FROM sales LIMIT 10
+```
+
+This feature requires an OpenAI API key set in the `OPENAI_API_KEY` environment variable.
 
 ## Python example usage:
 ```python
@@ -190,6 +235,33 @@ merge_files(
     allow_cast=True,  # Enable schema reconciliation
     chunksize=100_000  # Process in chunks of 100K rows for memory efficiency
 )
+
+# ===== SQL Queries =====
+
+# Execute SQL queries against data files
+from omni_morph.data.query_engine import query, validate_sql
+
+# Run a query and get results as a PyArrow table
+result_table = query(
+    "SELECT country, COUNT(*) as count FROM userdata GROUP BY country ORDER BY count DESC",
+    "data/userdata.csv",
+    return_type="arrow"
+)
+
+# Run a query and get results as a pandas DataFrame
+result_df = query(
+    "SELECT AVG(salary) as avg_salary, gender FROM employees GROUP BY gender",
+    "data/employees.parquet",
+    return_type="pandas"
+)
+
+# Validate SQL syntax without executing the query
+error = validate_sql(
+    "SELECT * FROM data WHERE id = ?",
+    "data.csv"
+)
+if error:
+    print(f"SQL validation error: {error}")
 ```
 
 ## Supported File Formats

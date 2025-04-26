@@ -131,15 +131,6 @@ def stats(
         raise typer.Exit(code=1)
 
 @app.command()
-def validate(file_path: Path = typer.Argument(..., help="Path to the input file"),
-             schema_path: Path = typer.Option(None, "--schema-path", help="Path to schema file")):
-    """
-    Validate a file against a schema.
-    """
-    typer.echo("validate command not implemented", err=True)
-    raise typer.Exit(code=1)
-
-@app.command()
 def merge(files: list[Path] = typer.Argument(..., help="Files to merge"),
           output_path: Path = typer.Argument(..., help="Output file path"),
           allow_cast: bool = typer.Option(True, "--allow-cast/--no-cast", help="Allow automatic casting between compatible types"),
