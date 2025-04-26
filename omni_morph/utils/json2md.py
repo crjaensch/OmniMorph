@@ -109,3 +109,43 @@ def _format_top5(top5: List[Dict[str, Any]]) -> str:
         formatted.append(f"{value} · {count}")
     
     return " ; ".join(formatted)
+
+
+def schema_to_markdown(schema_data: Dict[str, List[Dict[str, Any]]]) -> str:
+    """Convert schema data to a Markdown formatted string.
+    
+    Args:
+        schema_data: Dictionary containing schema data with 'fields' as the key
+                    and a list of field definitions as the value.
+    
+    Returns:
+        A string containing the Markdown formatted representation of the schema.
+    """
+    markdown = []
+    
+    # Add title
+    markdown.append("# 📦 Data Schema Overview\n")
+    
+    # Create table header
+    markdown.append("| Field Name | Data Type | Nullable | Description |")
+    markdown.append("| ---------- | --------- | -------- | ----------- |")
+    
+    # Add rows for each field
+    for field in schema_data.get("fields", []):
+        name = field.get("name", "")
+        data_type = field.get("type", "")
+        nullable = "✅" if field.get("nullable", False) else "❌"
+        
+        # Description is not in the schema JSON, so we leave it empty
+        description = ""
+        
+        row = [
+            name,
+            data_type,
+            nullable,
+            description
+        ]
+        
+        markdown.append(f"| {' | '.join(row)} |")
+    
+    return "\n".join(markdown)

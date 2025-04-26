@@ -75,14 +75,21 @@ def meta(file_path: Path = typer.Argument(..., help="Path to the input file")):
         raise typer.Exit(code=1)
 
 @app.command()
-def schema(file_path: Path = typer.Argument(..., help="Path to the input file")):
+def schema(file_path: Path = typer.Argument(..., help="Path to the input file"),
+         markdown: bool = typer.Option(False, "--markdown", help="Output in markdown format instead of JSON")):
     """
     Print the schema for a file.
     """
     try:
         # Import here to avoid import errors for other commands
         schema = get_schema(str(file_path))
-        typer.echo(json.dumps(schema, indent=2))
+        
+        # Output the results based on format preference
+        if markdown:
+            from omni_morph.utils.json2md import schema_to_markdown
+            typer.echo(schema_to_markdown(schema))
+        else:
+            typer.echo(json.dumps(schema, indent=2))
     except Exception as e:
         typer.echo(f"Error extracting schema: {e}", err=True)
         raise typer.Exit(code=1)
