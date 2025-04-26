@@ -4,18 +4,26 @@ This module provides functions to convert JSON data structures to Markdown
 formatted strings for better human readability in CLI output.
 """
 
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List
 
 
 def stats_to_markdown(stats_data: Dict[str, Dict[str, Any]]) -> str:
-    """Convert statistics data to a Markdown formatted string.
-    
+    """
+    Convert statistics data to a Markdown formatted string.
+
+    Generates Markdown tables for numeric and categorical columns based on stats.
+
     Args:
-        stats_data: Dictionary containing statistics data with column names as keys
-                   and their statistics as values.
-    
+        stats_data (Dict[str, Dict[str, Any]]): Mapping of column names to their statistics.
+            For numeric columns, each stats dict should include:
+                - type: 'numeric'
+                - count, min, max, mean, median
+            For categorical columns, each stats dict should include:
+                - type: 'categorical'
+                - distinct, top5 (List[dict] with 'value' and 'count')
+
     Returns:
-        A string containing the Markdown formatted representation of the statistics.
+        str: Markdown formatted representation of the statistics.
     """
     # Separate numeric and categorical columns
     numeric_cols = {}
@@ -111,15 +119,19 @@ def _format_top5(top5: List[Dict[str, Any]]) -> str:
     return " ; ".join(formatted)
 
 
-def schema_to_markdown(schema_data: Dict[str, List[Dict[str, Any]]]) -> str:
-    """Convert schema data to a Markdown formatted string.
-    
+def schema_to_markdown(schema_data: Dict[str, Any]) -> str:
+    """
+    Convert schema or JSON schema data to a Markdown formatted string.
+
+    Renders a Markdown table showing each field's name, data type, nullability, and description.
+
     Args:
-        schema_data: Dictionary containing schema data with 'fields' as the key
-                    and a list of field definitions as the value.
-    
+        schema_data (Dict[str, Any]): Schema mapping. Supports two forms:
+            - {'fields': List[dict]}: list of field dicts with keys 'name', 'type', 'nullable', optional 'description'.
+            - JSON Schema dict: with 'properties' mapping field names to schemas containing 'type' and optional 'description'.
+
     Returns:
-        A string containing the Markdown formatted representation of the schema.
+        str: Markdown formatted representation of the schema.
     """
     markdown = []
     
@@ -130,22 +142,63 @@ def schema_to_markdown(schema_data: Dict[str, List[Dict[str, Any]]]) -> str:
     markdown.append("| Field Name | Data Type | Nullable | Description |")
     markdown.append("| ---------- | --------- | -------- | ----------- |")
     
-    # Add rows for each field
-    for field in schema_data.get("fields", []):
+    # Normalize fields list
+    fields: List[Dict[str, Any]] = []
+    # JSON Schema 'properties' branch
+    if isinstance(schema_data.get("properties"), dict):
+        for fname, props in schema_data["properties"].items():
+            ftype = props.get("type")
+            # union types list or single
+            if isinstance(ftype, list):
+                nullable = "✅" if "null" in ftype else "❌"
+                types = [t for t in ftype if t != "null"]
+                dtype = ",".join(types)
+            else:
+                nullable = "❌"
+                dtype = str(ftype)
+            fields.append({
+                "name": fname,
+                "type": dtype,
+                "nullable": nullable,
+                "description": props.get("description", "")
+            })
+    # Avro record schema branch
+    elif schema_data.get("type") == "record" and isinstance(schema_data.get("fields"), list):
+        for f in schema_data["fields"]:
+            name = f.get("name", "")
+            ftype = f.get("type")
+            # union types possibly list
+            if isinstance(ftype, list):
+                nullable = "✅" if "null" in ftype else "❌"
+                types = [t for t in ftype if t != "null"]
+                dtype = ",".join(types)
+            else:
+                nullable = "❌"
+                dtype = str(ftype)
+            fields.append({
+                "name": name,
+                "type": dtype,
+                "nullable": nullable,
+                "description": f.get("doc", "")
+            })
+    # Simple field definitions list branch
+    elif isinstance(schema_data.get("fields"), list):
+        for f in schema_data["fields"]:
+            fields.append({
+                "name": f.get("name", ""),
+                "type": str(f.get("type", "")),
+                "nullable": "✅" if f.get("nullable") else "❌",
+                "description": f.get("description", "")
+            })
+    # Add rows for each field definition
+    for field in fields:
         name = field.get("name", "")
         data_type = field.get("type", "")
-        nullable = "✅" if field.get("nullable", False) else "❌"
-        
-        # Description is not in the schema JSON, so we leave it empty
-        description = ""
-        
-        row = [
-            name,
-            data_type,
-            nullable,
-            description
-        ]
-        
+        # nullable may be stored as bool or already as checkmark
+        nullable = field.get("nullable")
+        nullable_mark = "✅" if nullable is True or nullable == "✅" else "❌"
+        description = field.get("description", "")
+        row = [name, data_type, nullable_mark, description]
         markdown.append(f"| {' | '.join(row)} |")
-    
+     
     return "\n".join(markdown)
