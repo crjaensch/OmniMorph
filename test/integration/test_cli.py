@@ -305,3 +305,37 @@ def test_random_sample_nonexistent_file():
         )
         assert result.returncode == 1
         assert "Error:" in result.stderr
+
+def test_query():
+    """Test the query command with a simple SQL query."""
+    # Test a simple SELECT query
+    result = run_cli(["query", str(CSV_FILE), "SELECT id, first_name, last_name FROM userdata1 LIMIT 5"])
+    assert result.returncode == 0
+    
+    # Verify the output contains a markdown table
+    output = result.stdout
+    assert "|" in output, "Output should contain markdown table formatting"
+    assert "id" in output, "Output should contain column headers"
+    assert "first_name" in output, "Output should contain column headers"
+    assert "last_name" in output, "Output should contain column headers"
+    
+    # Test with a more complex query (aggregation)
+    result = run_cli(["query", str(CSV_FILE), "SELECT gender, COUNT(*) as count, AVG(salary) as avg_salary FROM userdata1 GROUP BY gender"])
+    assert result.returncode == 0
+    
+    # Verify the output contains expected columns
+    output = result.stdout
+    assert "gender" in output, "Output should contain gender column"
+    assert "count" in output, "Output should contain count column"
+    assert "avg_salary" in output, "Output should contain avg_salary column"
+    
+    # Test with an invalid SQL query
+    result = run_cli(["query", str(CSV_FILE), "SELECT * FROM nonexistent_table"])
+    assert result.returncode == 0  # Command succeeds but shows validation error
+    assert "SQL validation failed" in result.stdout
+    assert "nonexistent_table" in result.stdout
+    
+    # Test with a non-existent file
+    result = run_cli(["query", "nonexistent.csv", "SELECT * FROM nonexistent"], expected_exit_code=1, check=False)
+    assert result.returncode == 1
+    assert "Error" in result.stderr

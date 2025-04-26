@@ -6,6 +6,8 @@ from omni_morph.data.converter import read, convert, Format, write
 from omni_morph.data.extractor import head as extract_head, tail as extract_tail, sample as extract_sample
 from omni_morph.data.statistics import get_stats
 from omni_morph.data.merging import merge_files
+from omni_morph.data.query_engine import query as run_query, validate_sql, ai_suggest
+from omni_morph.utils.file_utils import get_schema
 import typer
 import pyarrow as pa
 
@@ -79,7 +81,6 @@ def schema(file_path: Path = typer.Argument(..., help="Path to the input file"))
     """
     try:
         # Import here to avoid import errors for other commands
-        from omni_morph.utils.file_utils import get_schema
         schema = get_schema(str(file_path))
         typer.echo(json.dumps(schema, indent=2))
     except Exception as e:
@@ -252,4 +253,43 @@ def random_sample(file_path: Path = typer.Argument(..., help="Path to the input 
         typer.echo(f"Sampled data written to {output_path}")
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+@app.command()
+def query(
+    file_path: Path = typer.Argument(..., help="Path to the input data file"),
+    sql: str = typer.Argument(..., help="SQL query to execute against the data file"),
+    format: str = typer.Option(None, "--format", "-f", help="Force specific format (avro, parquet, csv, json)"),
+):
+    """
+    Run SQL queries against a data file using DuckDB.
+    
+    The file is exposed as a view with a name matching its filename (without extension).
+    For example, 'sales_2025.parquet' becomes a table named 'sales_2025'.
+    """
+    try:
+        # Convert format string to Format enum if provided
+        fmt = Format(format) if format else None
+        
+        # Validate SQL before execution
+        err = validate_sql(sql, file_path, fmt=fmt)
+        
+        if err is None:
+            # SQL is valid - execute and stream result
+            run_query(sql, file_path, fmt=fmt, return_type="stdout")
+        else:
+            # SQL is invalid - fetch schema & ask AI for suggestions
+            schema_txt = json.dumps(get_schema(str(file_path), fmt), indent=2)
+            typer.echo(f"\n❌ SQL validation failed:\n{err}\n")
+            
+            try:
+                suggestion = ai_suggest(sql, err, schema_txt)
+                typer.echo("💡 Suggested fix:\n")
+                typer.echo(suggestion)
+            except Exception as ex:
+                # AI fallback - show schema so user can fix manually
+                typer.echo(f"⚠️ Could not get AI suggestion: {ex}")
+                typer.echo(f"\nSchema:\n{schema_txt}")
+    except Exception as e:
+        typer.echo(f"Error executing query: {e}", err=True)
         raise typer.Exit(code=1)
