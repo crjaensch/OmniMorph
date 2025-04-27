@@ -89,23 +89,23 @@ The wizard provides:
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃                             OmniMorph Wizard 🤖                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-? Choose a command › - Use arrow-keys. Return to select, Esc to cancel
-❯ head
-  tail
-  schema
-  stats
-  meta
-  query
-  random-sample
-  merge
-  to-json
-  to-csv
-  to-avro
-  to-parquet
-  Quit
+? Choose a command |
+head
+tail
+meta
+schema
+stats
+query
+random-sample
+to-avro
+to-csv
+to-json
+to-parquet
+merge
+QUIT
 ```
 
-After selecting a command, the wizard will guide you through each parameter, allowing you to build and execute complex commands with ease.
+Simply use the arrow keys to navigate through the available commands, press Enter to select, and follow the interactive prompts to complete your data operation.
 
 ## Examples
 

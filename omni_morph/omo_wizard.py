@@ -52,17 +52,25 @@ COMMANDS = {
             {"name": "file", "kind": "path", "positional": True},
         ]
     },
-    "merge": {
+    "query": {
         "args": [
-            {"name": "--allow-cast", "kind": "flag", "default": True},
-            {"name": "--progress", "kind": "flag", "default": False},
-            {"name": "files", "kind": "paths", "positional": True},
+            {"name": "--format", "kind": "text", "optional": True},
+            {"name": "file", "kind": "path", "positional": True},
+            {"name": "sql_query", "kind": "sql", "positional": True},
+        ]
+    },
+    "random-sample": {
+        "args": [
+            {"name": "--n", "kind": "int", "optional": True},
+            {"name": "--fraction", "kind": "float", "optional": True},
+            {"name": "--seed", "kind": "int", "optional": True},
+            {"name": "file", "kind": "path", "positional": True},
             {"name": "output", "kind": "output_path", "positional": True},
         ]
     },
-    "to-json": {
+    "to-avro": {
         "args": [
-            {"name": "--pretty", "kind": "flag", "default": False},
+            {"name": "--compression", "kind": "text", "default": "uncompressed"},
             {"name": "file", "kind": "path", "positional": True},
             {"name": "output", "kind": "output_path", "positional": True},
         ]
@@ -76,9 +84,9 @@ COMMANDS = {
             {"name": "output", "kind": "output_path", "positional": True},
         ]
     },
-    "to-avro": {
+    "to-json": {
         "args": [
-            {"name": "--compression", "kind": "text", "default": "uncompressed"},
+            {"name": "--pretty", "kind": "flag", "default": False},
             {"name": "file", "kind": "path", "positional": True},
             {"name": "output", "kind": "output_path", "positional": True},
         ]
@@ -90,20 +98,12 @@ COMMANDS = {
             {"name": "output", "kind": "output_path", "positional": True},
         ]
     },
-    "random-sample": {
+    "merge": {
         "args": [
-            {"name": "--n", "kind": "int", "optional": True},
-            {"name": "--fraction", "kind": "float", "optional": True},
-            {"name": "--seed", "kind": "int", "optional": True},
-            {"name": "file", "kind": "path", "positional": True},
+            {"name": "--allow-cast", "kind": "flag", "default": True},
+            {"name": "--progress", "kind": "flag", "default": False},
+            {"name": "files", "kind": "paths", "positional": True},
             {"name": "output", "kind": "output_path", "positional": True},
-        ]
-    },
-    "query": {
-        "args": [
-            {"name": "--format", "kind": "text", "optional": True},
-            {"name": "file", "kind": "path", "positional": True},
-            {"name": "sql_query", "kind": "sql", "positional": True},
         ]
     },
 }
@@ -276,11 +276,11 @@ def app():
     while True:
         cmd_name = inquirer.select(                    # list prompt
             message="Choose a command",
-            choices=list(COMMANDS) + ["Quit"],
+            choices=list(COMMANDS) + ["QUIT"],
             long_instruction="Arrow keys to move ‣ Enter to select",
         ).execute()
 
-        if cmd_name == "Quit":
+        if cmd_name == "QUIT":
             console.print("Good-bye!")
             sys.exit(0)
 
