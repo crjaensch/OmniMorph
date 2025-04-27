@@ -53,7 +53,61 @@ Commands:
   to-parquet     Convert one file to Parquet format.
 ```
 
-### Examples
+## Interactive Wizard Interface
+
+In addition to the powerful command-line interface, OmniMorph offers an interactive wizard that guides you through building and executing commands step by step. This is especially helpful for users who are new to OmniMorph or prefer a more guided experience.
+
+```bash
+poetry run omo-wizard
+```
+
+The wizard provides:
+
+- **Interactive command selection**: Choose from all available commands with a simple arrow-key navigation
+- **Guided parameter input**: The wizard prompts for each parameter with helpful descriptions
+- **File path selection**: Navigate your file system to select input and output files
+- **Command preview**: See the full command before execution
+- **Confirmation step**: Review and confirm before running each command
+
+### When to use the wizard vs. CLI
+
+**Use the wizard when:**
+- You're new to OmniMorph and learning the available commands
+- You need help remembering command options and parameters
+- You prefer interactive selection of files and options
+- You want to explore OmniMorph's capabilities without memorizing syntax
+
+**Use the CLI when:**
+- You need to automate tasks in scripts
+- You're familiar with the commands and want faster execution
+- You need to process multiple files in batch operations
+- You're integrating OmniMorph into other workflows
+
+### Example Wizard Session
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                             OmniMorph Wizard 🤖                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+? Choose a command › - Use arrow-keys. Return to select, Esc to cancel
+❯ head
+  tail
+  schema
+  stats
+  meta
+  query
+  random-sample
+  merge
+  to-json
+  to-csv
+  to-avro
+  to-parquet
+  Quit
+```
+
+After selecting a command, the wizard will guide you through each parameter, allowing you to build and execute complex commands with ease.
+
+## Examples
 
 ```bash
 # View the schema of a CSV file

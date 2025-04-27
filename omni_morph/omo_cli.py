@@ -181,15 +181,14 @@ def to_csv(file_path: Path = typer.Argument(..., help="Path to the input file"),
            output_path: Path = typer.Argument(..., help="Path to the output CSV file"),
            has_header: bool = typer.Option(True, "--has-header", help="CSV has header"),
            delimiter: str = typer.Option(",", help="Delimiter"),
-           line_terminator: str = typer.Option("\n", help="Line terminator"),
            quote: str = typer.Option('"', help="Quote char")):
     """
     Convert one file to CSV format.
     """
+    # Only include parameters supported by PyArrow's WriteOptions
     write_kwargs = {
         "include_header": has_header,
         "delimiter": delimiter,
-        "line_terminator": line_terminator,
         "quoting_style": "needed" if quote == '"' else "all"
     }
     convert(file_path, output_path, dst_fmt=Format.CSV, write_kwargs=write_kwargs)

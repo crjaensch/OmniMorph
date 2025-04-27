@@ -91,33 +91,97 @@ def _read_impl(path: Path, fmt: Format, **kwargs) -> pa.Table:
 # --------------------------------------------------------------------------- #
 # Writers
 # --------------------------------------------------------------------------- #
+def _generate_avro_schema(table: pa.Table, sample_records: list) -> tuple:
+    """Generate an Avro schema based on a PyArrow table and sample records.
+    
+    Args:
+        table: PyArrow table
+        sample_records: Sample of records to analyze for type inference
+        
+    Returns:
+        tuple: (avro_schema, string_columns) where avro_schema is the generated schema
+               and string_columns is a set of column names that should be converted to strings
+    """
+    # Analyze sample to determine actual types used in each column
+    column_types = {field.name: set() for field in table.schema}
+    for record in sample_records:
+        for key, value in record.items():
+            if value is not None:
+                column_types[key].add(type(value).__name__)
+    
+    # Create schema based on sample data analysis
+    avro_schema = {"type": "record", "name": "Root", "fields": []}
+    string_columns = set()
+    
+    for field in table.schema:
+        field_name = field.name
+        types_in_column = column_types[field_name]
+        
+        # Default to the PyArrow type mapping
+        field_type = _pyarrow_to_avro_type(field.type, field_name)
+        
+        # If we have mixed types or string type is present, use string for safety
+        if len(types_in_column) > 1 or 'str' in types_in_column:
+            # Only override if not a complex type (struct or array)
+            if not isinstance(field_type, dict):
+                field_type = ["null", "string"]
+                string_columns.add(field_name)
+        
+        avro_schema["fields"].append({
+            "name": field_name,
+            "type": field_type
+        })
+    
+    return avro_schema, string_columns
+
+
 def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
     """Write a PyArrow Table to a file."""
     if fmt is Format.AVRO:
         if not HAS_FASTAVRO:
             raise ImportError("Fastavro is not available. Please install fastavro to support Avro format.")
         
-        # Convert PyArrow Table to list of Python dictionaries
-        records = table.to_pylist()
+        # Sample a small portion of the data to determine schema
+        sample_size = min(100, table.num_rows)
+        sample_indices = list(range(sample_size))
+        sample_table = table.take(sample_indices) if sample_size > 0 else table
+        sample_records = sample_table.to_pylist()
         
-        # Infer Avro schema from PyArrow schema
-        avro_schema = {"type": "record", "name": "Root", "fields": []}
-        for field in table.schema:
-            field_type = _pyarrow_to_avro_type(field.type)
-            avro_schema["fields"].append({
-                "name": field.name,
-                "type": field_type
-            })
+        # Generate the Avro schema from the sample data
+        avro_schema, string_columns = _generate_avro_schema(table, sample_records)
         
-        # Write Avro file using fastavro
+        # Define a generator function to process records incrementally
+        def record_generator():
+            # Process records in chunks to save memory
+            chunk_size = 1000  # Adjust based on memory constraints
+            for i in range(0, table.num_rows, chunk_size):
+                end_idx = min(i + chunk_size, table.num_rows)
+                chunk_indices = list(range(i, end_idx))
+                chunk = table.take(chunk_indices)
+                records_chunk = chunk.to_pylist()
+                
+                for record in records_chunk:
+                    # Process each record for compatibility with Avro
+                    for key, value in list(record.items()):
+                        # Handle datetime objects
+                        if hasattr(value, 'isoformat'):
+                            record[key] = value.isoformat()
+                        # Convert values in string_columns to strings
+                        elif key in string_columns and value is not None:
+                            record[key] = str(value)
+                    yield record
+        
+        # Write Avro file using fastavro with the generator
         with open(path, 'wb') as fo:
-            fastavro.writer(fo, avro_schema, records)
+            fastavro.writer(fo, avro_schema, record_generator())
     
     elif fmt is Format.PARQUET:
         papq.write_table(table, path, **kwargs)
     
     elif fmt is Format.CSV:
-        pacsv.write_csv(table, path, **kwargs)
+        # Create WriteOptions object with the provided kwargs
+        write_options = pacsv.WriteOptions(**kwargs)
+        pacsv.write_csv(table, path, write_options=write_options)
     
     elif fmt is Format.JSON:
         # PyArrow doesn't have a direct write_json function
@@ -132,28 +196,47 @@ def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
         raise AssertionError("unreachable")
 
 
-def _pyarrow_to_avro_type(pa_type: pa.DataType) -> str:
-    """Convert PyArrow type to Avro type."""
-    if pa.types.is_boolean(pa_type):
+def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str:
+    """Convert PyArrow type to Avro type.
+    
+    Args:
+        pa_type: PyArrow data type
+        field_path: Path to the field, used to create unique names for nested structures
+    """
+    if pa.types.is_null(pa_type):
+        return "null"
+    elif pa.types.is_boolean(pa_type):
         return "boolean"
     elif pa.types.is_integer(pa_type):
-        return "long"
+        # Allow for null values in integer fields
+        return ["null", "long"]
     elif pa.types.is_floating(pa_type):
-        return "double"
+        # Allow for null values in float fields
+        return ["null", "double"]
     elif pa.types.is_string(pa_type):
-        return "string"
+        # Allow for null values in string fields
+        return ["null", "string"]
     elif pa.types.is_binary(pa_type):
-        return "bytes"
+        return ["null", "bytes"]
+    elif pa.types.is_timestamp(pa_type) or pa.types.is_date(pa_type) or pa.types.is_time(pa_type):
+        # Handle datetime types as strings in Avro, allow nulls
+        return ["null", "string"]
     elif pa.types.is_list(pa_type):
-        return {"type": "array", "items": _pyarrow_to_avro_type(pa_type.value_type)}
+        item_type = _pyarrow_to_avro_type(pa_type.value_type, field_path + "_item")
+        return {"type": "array", "items": item_type}
     elif pa.types.is_struct(pa_type):
+        # Create a unique name for this struct based on its path
+        struct_name = field_path.lstrip("_") if field_path else "record"
+        
         fields = []
-        for field in pa_type:
+        for i, field in enumerate(pa_type):
+            # Create a unique path for nested fields
+            nested_path = f"{field_path}_{field.name}" if field_path else field.name
             fields.append({
                 "name": field.name,
-                "type": _pyarrow_to_avro_type(field.type)
+                "type": _pyarrow_to_avro_type(field.type, nested_path)
             })
-        return {"type": "record", "name": "struct", "fields": fields}
+        return {"type": "record", "name": struct_name, "fields": fields}
     else:
-        # Default to string for unsupported types
-        return "string"
+        # Default to nullable string for unsupported types
+        return ["null", "string"]
