@@ -18,9 +18,17 @@ from rich.progress import Progress
 
 console = Console()
 
+# Global variable to store the remembered file path
+REMEMBERED_FILE_PATH = None
+
 # ---------- 1. Minimal command registry ----------
 
 COMMANDS = {
+    "remember file": {
+        "args": [
+            {"name": "file", "kind": "path", "positional": True},
+        ]
+    },
     "head": {
         "args": [
             {"name": "--number", "kind": "int", "default": 10},
@@ -112,10 +120,12 @@ COMMANDS = {
 # ---------- 2. Helpers ----------
 
 def ask_path(message="Select file", multi=False):
+    global REMEMBERED_FILE_PATH
     try:
         if multi:
             paths = []
             while True:
+                # For multi-path selection, we don't use the remembered path
                 path = inquirer.filepath(
                     message=f"{message} (Enter to finish after selecting at least one)",
                     only_files=False,  # Allow directories to be shown for navigation
@@ -135,9 +145,21 @@ def ask_path(message="Select file", multi=False):
             
             return paths
         else:
+            # Show the remembered path in the message if it exists
+            display_message = message
+            if REMEMBERED_FILE_PATH and Path(REMEMBERED_FILE_PATH).is_file():
+                display_message = f"{message} [dim](remembered: {REMEMBERED_FILE_PATH})[/]"
+                # Offer to use the remembered path
+                use_remembered = inquirer.confirm(
+                    message=f"Use remembered file: {REMEMBERED_FILE_PATH}?",
+                    default=True
+                ).execute()
+                if use_remembered:
+                    return REMEMBERED_FILE_PATH
+            
             while True:
                 path = inquirer.filepath(
-                    message=message,
+                    message=display_message,
                     only_files=False,  # Allow directories to be shown for navigation
                     mandatory=False  # Allow empty input to handle ESC key
                 ).execute()
@@ -319,8 +341,23 @@ def run_cli(command_str):
 
 
 def build_command(cmd_name):
+    global REMEMBERED_FILE_PATH
     spec = COMMANDS[cmd_name]
-    parts = ["omo-cli", cmd_name]
+    parts = ["omo-cli"]
+    
+    # Handle the special case for the "remember file" command
+    if cmd_name == "remember file":
+        try:
+            file_path = ask_path("Select file to remember")
+            if file_path:
+                REMEMBERED_FILE_PATH = file_path
+                console.print(f"[bold green]Remembered file path:[/] {REMEMBERED_FILE_PATH}")
+            return None  # No command to execute for remember
+        except KeyboardInterrupt:
+            return None
+    
+    # For regular commands
+    parts.append(cmd_name)
 
     try:
         for arg in spec["args"]:
@@ -389,18 +426,42 @@ def build_command(cmd_name):
 
 def app():
     console.print(Markdown("# OmniMorph Wizard 🤖"))
+    global REMEMBERED_FILE_PATH
 
     while True:
         try:
+            # Show the remembered file in the main menu if it exists
+            if REMEMBERED_FILE_PATH and Path(REMEMBERED_FILE_PATH).is_file():
+                console.print(f"[dim]Remembered file:[/] {REMEMBERED_FILE_PATH}")
+            
+            # Create choices list with remember/forget at the top
+            command_choices = []
+            if REMEMBERED_FILE_PATH:
+                command_choices.append("forget file")
+            else:
+                command_choices.append("remember file")
+                
+            # Add all other commands
+            command_choices.extend(list(COMMANDS))
+            # Add quit option at the end
+            command_choices.append("QUIT")
+            
             cmd_name = inquirer.select(                    # list prompt
                 message="Choose a command",
-                choices=list(COMMANDS) + ["QUIT"],
+                choices=command_choices,
                 long_instruction="Arrow keys to move ‣ Enter to select ‣ CTRL-C to cancel",
             ).execute()
 
             if cmd_name == "QUIT":
                 console.print("Good-bye!")
                 sys.exit(0)
+            elif cmd_name == "forget file":
+                if REMEMBERED_FILE_PATH:
+                    REMEMBERED_FILE_PATH = None
+                    console.print("[bold yellow]Cleared remembered file path[/]")
+                else:
+                    console.print("[dim]No file path was remembered[/]")
+                continue
 
             command_str = build_command(cmd_name)
             if command_str is None:

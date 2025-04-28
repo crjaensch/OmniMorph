@@ -170,6 +170,7 @@ poetry run omo-wizard
 The wizard provides:
 
 - **Interactive command selection**: Choose from all available commands with arrow-key navigation
+- **File memory feature**: Remember a data file path across multiple commands with `remember file` and `forget file`
 - **Guided parameter input**: The wizard prompts for each parameter with helpful descriptions
 - **File path selection**: Navigate your file system to select input and output files
 - **Command preview**: See the full command before execution
@@ -182,6 +183,7 @@ The wizard provides:
 - You need help remembering command options and parameters
 - You prefer interactive selection of files and options
 - You want to explore OmniMorph's capabilities without memorizing syntax
+- You're working with the same data file across multiple operations
 
 **Use the CLI when:**
 - You need to automate tasks in scripts
@@ -196,6 +198,7 @@ The wizard provides:
 ┃                             OmniMorph Wizard 🤖                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ? Choose a command |
+> remember file
 head
 tail
 meta
@@ -209,9 +212,19 @@ to-json
 to-parquet
 merge
 QUIT
+
+Arrow keys to move • Enter to select • CTRL-C to cancel
 ```
 
-Simply use the arrow keys to navigate through the available commands, press Enter to select, and follow the interactive prompts to complete your data operation. Press CTRL-C to cancel a command and return to the main menu.
+### File Memory Feature
+
+The wizard now includes a file memory feature that allows you to remember a data file path across multiple commands:
+
+1. **Remember a file**: Select the `remember file` command to store a file path for subsequent operations
+2. **Use the remembered file**: When executing commands that require a file path, you'll be prompted to use the remembered file
+3. **Forget a file**: When you're done working with a file, select `forget file` to clear the remembered path
+
+This feature is especially useful when performing multiple operations on the same data file, such as checking the schema, running statistics, and executing queries in sequence.
 
 ## Features
 
