@@ -10,6 +10,7 @@ from pathlib import Path
 
 from InquirerPy import inquirer
 from InquirerPy.validator import NumberValidator
+from InquirerPy.base.control import Choice
 from prompt_toolkit.completion import PathCompleter
 from rich.console import Console
 from rich.markdown import Markdown
@@ -111,69 +112,102 @@ COMMANDS = {
 # ---------- 2. Helpers ----------
 
 def ask_path(message="Select file", multi=False):
-    if multi:
-        paths = []
-        while True:
-            path = inquirer.filepath(
-                message=f"{message} (Enter to finish after selecting at least one)",
-                only_files=False,  # Allow directories to be shown for navigation
-                validate=lambda result: True if result or paths else "Please select at least one file"
-            ).execute()
+    try:
+        if multi:
+            paths = []
+            while True:
+                path = inquirer.filepath(
+                    message=f"{message} (Enter to finish after selecting at least one)",
+                    only_files=False,  # Allow directories to be shown for navigation
+                    validate=lambda result: True if result or paths else "Please select at least one file",
+                    mandatory=False  # Allow empty input to handle ESC key
+                ).execute()
+                
+                if not path and paths:  # Empty input after at least one file
+                    break
+                elif path:
+                    # Check if the selected path is a file
+                    if Path(path).is_file():
+                        paths.append(path)
+                        console.print(f"[dim]Added:[/] {path}")
+                    else:
+                        console.print(f"[yellow]Please select a file, not a directory[/]")
             
-            if not path and paths:  # Empty input after at least one file
-                break
-            elif path:
+            return paths
+        else:
+            while True:
+                path = inquirer.filepath(
+                    message=message,
+                    only_files=False,  # Allow directories to be shown for navigation
+                    mandatory=False  # Allow empty input to handle ESC key
+                ).execute()
+                
                 # Check if the selected path is a file
-                if Path(path).is_file():
-                    paths.append(path)
-                    console.print(f"[dim]Added:[/] {path}")
-                else:
+                if path and Path(path).is_file():
+                    return path
+                elif path:
                     console.print(f"[yellow]Please select a file, not a directory[/]")
-        
-        return paths
-    else:
+                elif path == "":
+                    # User pressed ESC or entered empty string
+                    raise KeyboardInterrupt()
+    except KeyboardInterrupt:
+        console.print("[yellow]Returning to main menu...[/]")
+        raise
+
+
+def ask_int(message, default):
+    try:
+        return inquirer.number(
+            message=f"{message} (default: {default})",
+            validate=NumberValidator(),
+            default=default,
+            mandatory=False  # Allow empty input to handle ESC key
+        ).execute()
+    except KeyboardInterrupt:
+        console.print("[yellow]Returning to main menu...[/]")
+        raise
+
+
+def ask_flag(message, default=False):
+    try:
+        return inquirer.confirm(message=message, default=default).execute()
+    except KeyboardInterrupt:
+        console.print("[yellow]Returning to main menu...[/]")
+        raise
+
+
+def ask_text(message):
+    try:
+        return inquirer.text(
+            message=message,
+            mandatory=False  # Allow empty input to handle ESC key
+        ).execute()
+    except KeyboardInterrupt:
+        console.print("[yellow]Returning to main menu...[/]")
+        raise
+
+
+def ask_output_path(message):
+    try:
         while True:
             path = inquirer.filepath(
                 message=message,
                 only_files=False,  # Allow directories to be shown for navigation
+                validate=lambda result: True if result else "Please select a path",
+                mandatory=False  # Allow empty input to handle ESC key
             ).execute()
             
-            # Check if the selected path is a file
-            if path and Path(path).is_file():
-                return path
-            elif path:
+            # Check if the selected path is a directory
+            if path and Path(path).is_dir():
                 console.print(f"[yellow]Please select a file, not a directory[/]")
-
-
-def ask_int(message, default):
-    return inquirer.number(
-        message=f"{message} (default: {default})",
-        validate=NumberValidator(),
-        default=default,
-    ).execute()
-
-
-def ask_flag(message, default=False):
-    return inquirer.confirm(message=message, default=default).execute()
-
-
-def ask_text(message):
-    return inquirer.text(message=message).execute()
-
-
-def ask_output_path(message):
-    while True:
-        path = inquirer.filepath(
-            message=message,
-            only_files=False,  # Allow directories to be shown for navigation
-            validate=lambda result: True if result else "Please select a path"
-        ).execute()
-        
-        # Check if the selected path is a directory
-        if path and Path(path).is_dir():
-            console.print(f"[yellow]Please select a file, not a directory[/]")
-        else:
-            return path
+            elif path == "":
+                # User pressed ESC or entered empty string
+                raise KeyboardInterrupt()
+            else:
+                return path
+    except KeyboardInterrupt:
+        console.print("[yellow]Returning to main menu...[/]")
+        raise
 
 
 # ---------- 3. Main loop ----------
@@ -182,69 +216,75 @@ def build_command(cmd_name):
     spec = COMMANDS[cmd_name]
     parts = ["omo-cli", cmd_name]
 
-    for arg in spec["args"]:
-        kind = arg["kind"]
-        name = arg["name"]
-        is_positional = arg.get("positional", False)
+    try:
+        for arg in spec["args"]:
+            kind = arg["kind"]
+            name = arg["name"]
+            is_positional = arg.get("positional", False)
 
-        if kind == "path":
-            value = ask_path(f"Path for {name.lstrip('-')}")
-            if is_positional:
-                parts.append(str(value))
-            else:
-                parts.extend([name, str(value)])
-
-        elif kind == "paths":
-            value = ask_path(f"Paths for {name.lstrip('-')}", multi=True)
-            if is_positional:
-                parts.extend([str(v) for v in value])
-            else:
-                parts.append(name)
-                parts.extend([str(v) for v in value])
-
-        elif kind == "int":
-            value = ask_int(name.lstrip("-"), arg.get("default", 0))
-            if is_positional:
-                parts.append(str(value))
-            else:
-                parts.extend([name, str(value)])
-
-        elif kind == "float":
-            value = ask_text(f"{name.lstrip('-')} (default: {arg.get('default', 0)})")
-            if value:
+            if kind == "path":
+                value = ask_path(f"Path for {name.lstrip('-')}")
                 if is_positional:
-                    parts.append(value)
+                    parts.append(str(value))
                 else:
-                    parts.extend([name, value])
+                    parts.extend([name, str(value)])
 
-        elif kind == "flag":
-            if ask_flag(f"Enable {name.lstrip('-')}", default=arg.get("default", False)):
-                parts.append(name)
-
-        elif kind == "text":
-            value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
-            if value:
+            elif kind == "paths":
+                value = ask_path(f"Paths for {name.lstrip('-')}", multi=True)
                 if is_positional:
-                    parts.append(value)
+                    parts.extend([str(v) for v in value])
                 else:
-                    parts.extend([name, value])
+                    parts.append(name)
+                    parts.extend([str(v) for v in value])
 
-        elif kind == "sql":
-            value = ask_text(f"{name.lstrip('-')} (SQL query)")
-            if value:
-                parts.append(value)
+            elif kind == "int":
+                value = ask_int(name.lstrip("-"), arg.get("default", 0))
+                if is_positional:
+                    parts.append(str(value))
+                else:
+                    parts.extend([name, str(value)])
 
-        elif kind == "output_path":
-            value = ask_output_path(f"Output path for {name.lstrip('-')}")
-            if is_positional:
-                parts.append(str(value))
-            else:
-                parts.extend([name, str(value)])
+            elif kind == "float":
+                value = ask_text(f"{name.lstrip('-')} (default: {arg.get('default', 0)})")
+                if value:
+                    if is_positional:
+                        parts.append(value)
+                    else:
+                        parts.extend([name, value])
 
-    return shlex.join(parts)
+            elif kind == "flag":
+                if ask_flag(f"Enable {name.lstrip('-')}", default=arg.get("default", False)):
+                    parts.append(name)
+
+            elif kind == "text":
+                value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
+                if value:
+                    if is_positional:
+                        parts.append(value)
+                    else:
+                        parts.extend([name, value])
+
+            elif kind == "sql":
+                value = ask_text(f"{name.lstrip('-')} (SQL query)")
+                if value:
+                    parts.append(value)
+
+            elif kind == "output_path":
+                value = ask_output_path(f"Output path for {name.lstrip('-')}")
+                if is_positional:
+                    parts.append(str(value))
+                else:
+                    parts.extend([name, str(value)])
+
+        return shlex.join(parts)
+    except KeyboardInterrupt:
+        return None
 
 
 def run_cli(command_str):
+    if command_str is None:
+        return
+        
     console.rule(f"[bold green]Executing[/] {command_str}")
 
     # stream output live while showing Rich progress spinner
@@ -274,20 +314,33 @@ def app():
     console.print(Markdown("# OmniMorph Wizard 🤖"))
 
     while True:
-        cmd_name = inquirer.select(                    # list prompt
-            message="Choose a command",
-            choices=list(COMMANDS) + ["QUIT"],
-            long_instruction="Arrow keys to move ‣ Enter to select",
-        ).execute()
+        try:
+            cmd_name = inquirer.select(                    # list prompt
+                message="Choose a command",
+                choices=list(COMMANDS) + ["QUIT"],
+                long_instruction="Arrow keys to move ‣ Enter to select ‣ CTRL-C to cancel",
+            ).execute()
 
-        if cmd_name == "QUIT":
-            console.print("Good-bye!")
-            sys.exit(0)
+            if cmd_name == "QUIT":
+                console.print("Good-bye!")
+                sys.exit(0)
 
-        command_str = build_command(cmd_name)
-        console.print(f"[dim]Will run:[/] {command_str}")
-        if ask_flag("Proceed?", True):
-            run_cli(command_str)
+            command_str = build_command(cmd_name)
+            if command_str is None:
+                continue
+                
+            console.print(f"[dim]Will run:[/] {command_str}")
+            try:
+                if ask_flag("Proceed?", True):
+                    run_cli(command_str)
+            except KeyboardInterrupt:
+                console.print("[yellow]Cancelled execution[/]")
+                continue
+        except KeyboardInterrupt:
+            # Handle ESC at the top level menu
+            if ask_flag("Do you want to quit?", False):
+                console.print("Good-bye!")
+                sys.exit(0)
 
 
 if __name__ == "__main__":

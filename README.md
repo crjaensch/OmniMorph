@@ -5,7 +5,32 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
   <img src="assets/omnimorph-logo.png" alt="OmniMorph Logo" width="500"/>
 </p>
 
-## Installation (WIP)
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Command-Line Interface](#command-line-interface)
+  - [Available Commands](#available-commands)
+  - [Command Examples](#command-examples)
+- [Interactive Wizard](#interactive-wizard)
+  - [When to Use Wizard vs CLI](#when-to-use-wizard-vs-cli)
+  - [Example Wizard Session](#example-wizard-session)
+- [Features](#features)
+  - [Statistical Analysis](#statistical-analysis)
+  - [SQL Queries with DuckDB](#sql-queries-with-duckdb)
+  - [AI-Powered SQL Assistance](#ai-powered-sql-assistance)
+  - [Large File Processing](#large-file-processing)
+  - [Schema Inference](#schema-inference)
+- [Python API](#python-api)
+  - [File Format Conversion](#file-format-conversion)
+  - [Data Inspection](#data-inspection)
+  - [Schema and Metadata](#schema-and-metadata)
+  - [Statistical Analysis (API)](#statistical-analysis-api)
+  - [File Merging](#file-merging)
+  - [SQL Queries (API)](#sql-queries-api)
+- [Supported File Formats](#supported-file-formats)
+
+## Installation
 
 ```bash
 # Install using Poetry (recommended)
@@ -15,7 +40,26 @@ poetry install
 pip install omni_morph
 ```
 
-## Usage
+## Quick Start
+
+```bash
+# View command help
+poetry run omo-cli --help
+
+# View the schema of a CSV file
+poetry run omo-cli schema data.csv
+
+# Convert from one format to another
+poetry run omo-cli to-json data.csv output.json
+
+# Run SQL queries against data files
+poetry run omo-cli query data.csv "SELECT * FROM data LIMIT 10"
+
+# Launch the interactive wizard
+poetry run omo-wizard
+```
+
+## Command-Line Interface
 
 ```bash
 poetry run omo-cli --help
@@ -53,9 +97,71 @@ Commands:
   to-parquet     Convert one file to Parquet format.
 ```
 
-## Interactive Wizard Interface
+### Available Commands
 
-In addition to the powerful command-line interface, OmniMorph offers an interactive wizard that guides you through building and executing commands step by step. This is especially helpful for users who are new to OmniMorph or prefer a more guided experience.
+| Command | Description |
+|---------|-------------|
+| `head` | Print the first N records from a file |
+| `tail` | Print the last N records from a file |
+| `meta` | Print file metadata (size, creation date, etc.) |
+| `schema` | Print the schema for a file |
+| `stats` | Print statistics about a file |
+| `query` | Run SQL queries against data files using DuckDB |
+| `random-sample` | Randomly sample records from a file |
+| `to-avro` | Convert a file to Avro format |
+| `to-csv` | Convert a file to CSV format |
+| `to-json` | Convert a file to JSON format |
+| `to-parquet` | Convert a file to Parquet format |
+| `merge` | Merge multiple files into a single output file |
+
+### Command Examples
+
+```bash
+# View the schema of a CSV file
+poetry run omo-cli schema data.csv
+
+# Get statistics about columns in a file
+poetry run omo-cli stats data.csv
+
+# Get statistics in markdown format for better readability
+poetry run omo-cli stats data.csv --markdown
+
+# Analyze specific columns only
+poetry run omo-cli stats data.parquet --columns col1,col2,col3
+
+# Force a specific format
+poetry run omo-cli stats data.txt --format csv
+
+# Adjust the sample size for t-digest median approximation
+poetry run omo-cli stats large_data.parquet --sample-size 5000
+
+# Convert from one format to another
+poetry run omo-cli to-json data.csv output.json
+
+# Randomly sample records from a file
+poetry run omo-cli random-sample data.csv --n 50 --seed 42
+poetry run omo-cli random-sample data.parquet --fraction 0.1
+
+# View file metadata
+poetry run omo-cli meta data.csv
+
+# Merge multiple files into a single output file
+poetry run omo-cli merge file1.csv file2.csv merged_output.csv
+
+# Merge files of different formats (CSV and JSON) into a Parquet file
+poetry run omo-cli merge data1.csv data2.json combined_data.parquet
+
+# Run SQL queries against data files
+poetry run omo-cli query data.csv "SELECT * FROM data LIMIT 10"
+poetry run omo-cli query sales.parquet "SELECT category, SUM(amount) as total FROM sales GROUP BY category ORDER BY total DESC"
+
+# Force a specific format for SQL queries
+poetry run omo-cli query data.txt --format csv "SELECT * FROM data WHERE id > 100"
+```
+
+## Interactive Wizard
+
+In addition to the command-line interface, OmniMorph offers an interactive wizard that guides you through building and executing commands step by step.
 
 ```bash
 poetry run omo-wizard
@@ -63,13 +169,13 @@ poetry run omo-wizard
 
 The wizard provides:
 
-- **Interactive command selection**: Choose from all available commands with a simple arrow-key navigation
+- **Interactive command selection**: Choose from all available commands with arrow-key navigation
 - **Guided parameter input**: The wizard prompts for each parameter with helpful descriptions
 - **File path selection**: Navigate your file system to select input and output files
 - **Command preview**: See the full command before execution
 - **Confirmation step**: Review and confirm before running each command
 
-### When to use the wizard vs. CLI
+### When to Use Wizard vs CLI
 
 **Use the wizard when:**
 - You're new to OmniMorph and learning the available commands
@@ -105,100 +211,48 @@ merge
 QUIT
 ```
 
-Simply use the arrow keys to navigate through the available commands, press Enter to select, and follow the interactive prompts to complete your data operation.
+Simply use the arrow keys to navigate through the available commands, press Enter to select, and follow the interactive prompts to complete your data operation. Press CTRL-C to cancel a command and return to the main menu.
 
-## Examples
+## Features
 
-```bash
-# View the schema of a CSV file
-omo-cli schema data.csv
+### Statistical Analysis
 
-# Get statistics about columns in a file
-omo-cli stats data.csv
+OmniMorph provides comprehensive statistical analysis of your data files. Here's an example of the statistics output in markdown format for a sample file:
 
-# Get statistics in markdown format for better readability
-omo-cli stats data.csv --markdown
-
-# Analyze specific columns only
-omo-cli stats data.parquet --columns col1,col2,col3
-
-# Force a specific format
-omo-cli stats data.txt --format csv
-
-# Adjust the sample size for t-digest median approximation
-omo-cli stats large_data.parquet --sample-size 5000
-
-# Convert from one format to another
-omo-cli to-json data.csv output.json
-
-# Randomly sample records from a file
-omo-cli random-sample data.csv --n 50 --seed 42
-omo-cli random-sample data.parquet --fraction 0.1
-
-# View file metadata
-omo-cli meta data.csv
-
-# Merge multiple files into a single output file
-omo-cli merge file1.csv file2.csv merged_output.csv
-
-# Merge files of different formats (CSV and JSON) into a Parquet file
-omo-cli merge data1.csv data2.json combined_data.parquet
-
-# Run SQL queries against data files
-omo-cli query data.csv "SELECT * FROM data LIMIT 10"
-omo-cli query sales.parquet "SELECT category, SUM(amount) as total FROM sales GROUP BY category ORDER BY total DESC"
-
-# Force a specific format for SQL queries
-omo-cli query data.txt --format csv "SELECT * FROM data WHERE id > 100"
-```
-
-## Statistical Analysis Output Example
-
-Here's an example of the statistics output in markdown format for the sample file `test/data/sample-data/parquet/userdata1.parquet`:
-
-# Numeric columns
+#### Numeric columns
 
 | column | non-null count | min | max | mean | median |
 | ------ | ------------- | --- | --- | ---- | ------ |
 | id | 1000 | 1 | 1000 | 500.50 | 500.50 |
 | salary | 932 | 12380.49 | 286592.99 | 149005.36 | 147274.51 |
 
-# Categorical columns
+#### Categorical columns
 
 | column | distinct | top-5 categories (value · count) |
 | ------ | -------- | ------------------------------- |
 | registration_dttm | 995 | 2016-02-03 00:33:25 · 2 ; 2016-02-03 17:07:31 · 2 ; 2016-02-03 00:36:46 · 2 ; 2016-02-03 10:35:23 · 2 ; 2016-02-03 10:07:00 · 2 |
 | first_name | 198 | __NULL__ · 16 ; Samuel · 11 ; Peter · 11 ; Mark · 11 ; Stephen · 10 |
 | last_name | 247 | Barnes · 10 ; Willis · 9 ; Shaw · 9 ; Patterson · 9 ; Lane · 8 |
-| email | 985 | __NULL__ · 16 ; ajordan0@com.com · 1 ; afreeman1@is.gd · 1 ; emorgan2@altervista.org · 1 ; driley3@gmpg.org · 1 |
 | gender | 3 | Female · 482 ; Male · 451 ; __NULL__ · 67 |
-| ip_address | 1000 | 1.197.201.2 · 1 ; 218.111.175.34 · 1 ; 7.161.136.94 · 1 ; 140.35.109.83 · 1 ; 169.113.235.40 · 1 |
-| cc | 710 | __NULL__ · 291 ; 6759521864920116 · 1 ; 6767119071901597 · 1 ; 3576031598965625 · 1 ; 5602256255204850 · 1 |
-| country | 120 | China · 189 ; Indonesia · 97 ; Russia · 62 ; Philippines · 45 ; Portugal · 38 |
-| birthdate | 788 | __NULL__ · 197 ; 1/28/1997 · 2 ; 7/21/1986 · 2 ; 4/10/1965 · 2 ; 11/18/1958 · 2 |
-| title | 182 | __NULL__ · 197 ; Electrical Engineer · 15 ; Structural Analysis Engineer · 13 ; Senior Cost Accountant · 12 ; Senior Sales Associate · 12 |
 
 This human-readable format makes it easy to quickly understand the characteristics of your data.
 
-## SQL Queries with DuckDB
+### SQL Queries with DuckDB
 
 OmniMorph includes a powerful SQL query engine powered by DuckDB that allows you to run SQL queries directly against data files without needing to set up a database.
 
-### Features
-
+Features:
 - Run SQL queries against CSV, JSON, Avro, and Parquet files
 - Results displayed as nicely formatted markdown tables
 - Automatic schema inference from data files
-- AI-powered query suggestions when SQL validation fails
 
-### Example
-
+Example:
 ```bash
 # Basic query with limit
-omo-cli query userdata.csv "SELECT id, first_name, last_name FROM userdata LIMIT 5"
+poetry run omo-cli query userdata.csv "SELECT id, first_name, last_name FROM userdata LIMIT 5"
 
 # Aggregation query with grouping
-omo-cli query sales.parquet "SELECT category, COUNT(*) as count, SUM(amount) as total FROM sales GROUP BY category"
+poetry run omo-cli query sales.parquet "SELECT category, COUNT(*) as count, SUM(amount) as total FROM sales GROUP BY category"
 ```
 
 ### AI-Powered SQL Assistance
@@ -218,15 +272,34 @@ SELECT * FROM sales LIMIT 10
 
 This feature requires an OpenAI API key set in the `OPENAI_API_KEY` environment variable.
 
-## Python example usage:
-```python
-from omni_morph.data import convert, Format, head, tail, sample, get_stats
-from omni_morph.data.merging import merge_files
-from omni_morph.utils.file_utils import get_schema, get_metadata
-from pathlib import Path
-import pyarrow as pa
+### Large File Processing
 
-# ===== File Format Conversion =====
+OmniMorph is optimized for processing very large data files:
+
+- **Parquet Files**: Memory-efficient processing for files >10GB using intelligent row group handling
+- **Avro Files**: Two-pass sampling approach for files >1GB that maintains constant memory usage
+- **Statistics Computation**: The `get_stats()` function processes files in chunks, maintaining constant memory usage even for very large files
+
+These optimizations apply to the `tail()`, `sample()`, and `get_stats()` functions (and their CLI counterparts), making OmniMorph suitable for working with datasets in the 10-100GB range without running out of memory.
+
+### Schema Inference
+
+OmniMorph provides robust schema inference for all supported file formats:
+
+- **CSV**: Custom inference engine that samples rows to determine column types
+- **JSON**: Uses GenSON to generate JSON Schema
+- **Avro**: Extracts embedded schema
+- **Parquet**: Extracts embedded schema
+
+## Python API
+
+OmniMorph can also be used as a Python library in your own projects.
+
+### File Format Conversion
+
+```python
+from omni_morph.data import convert, Format, write
+import pyarrow as pa
 
 # Convert between different file formats
 convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
@@ -236,8 +309,12 @@ convert("records.json", "records_converted.avro")   # JSON   → Avro
 # Write PyArrow tables directly
 table = pa.table({"x": [1, 2, 3]})
 write(table, Path("my_table.avro"), Format.AVRO)
+```
 
-# ===== Data Inspection =====
+### Data Inspection
+
+```python
+from omni_morph.data import head, tail, sample
 
 # Extract first/last records from files
 first_records = head("data.csv", 10)                # Get first 10 records as PyArrow Table
@@ -246,8 +323,13 @@ last_records = tail("data.parquet", 5, return_type="pandas")  # Get last 5 recor
 # Random sampling of records
 sample_n = sample("data.csv", n=50, seed=42)        # Sample exactly 50 records
 sample_frac = sample("data.parquet", fraction=0.1)  # Sample approximately 10% of records
+```
 
-# ===== Schema and Metadata =====
+### Schema and Metadata
+
+```python
+from omni_morph.utils.file_utils import get_schema, get_metadata
+from omni_morph.data import Format
 
 # Extract schema from a file
 schema = get_schema("data.csv")                     # Auto-detect format from extension
@@ -255,8 +337,12 @@ schema = get_schema("data.file", fmt=Format.CSV)    # Explicitly specify format
 
 # Get file metadata
 metadata = get_metadata("data.parquet")             # File size, record count, etc.
+```
 
-# ===== Statistical Analysis =====
+### Statistical Analysis (API)
+
+```python
+from omni_morph.data import get_stats, Format
 
 # Get column statistics from files
 stats = get_stats("data.csv")                       # Get stats for all columns
@@ -271,8 +357,13 @@ print(f"Median of col1: {stats['col1']['median']}")
 # Categorical columns include: distinct count, top values
 print(f"Distinct values in col2: {stats['col2']['distinct_count']}")
 print(f"Most common value: {stats['col2']['top_values'][0][0]}")
+```
 
-# ===== File Merging =====
+### File Merging
+
+```python
+from omni_morph.data.merging import merge_files
+from omni_morph.data import Format
 
 # Merge multiple files into a single output file
 merge_files(
@@ -289,10 +380,11 @@ merge_files(
     allow_cast=True,  # Enable schema reconciliation
     chunksize=100_000  # Process in chunks of 100K rows for memory efficiency
 )
+```
 
-# ===== SQL Queries =====
+### SQL Queries (API)
 
-# Execute SQL queries against data files
+```python
 from omni_morph.data.query_engine import query, validate_sql
 
 # Run a query and get results as a PyArrow table
@@ -320,26 +412,7 @@ if error:
 
 ## Supported File Formats
 
-- CSV (.csv)
-- JSON (.json)
-- Avro (.avro)
-- Parquet (.parquet)
-
-## Large File Processing
-
-OmniMorph is optimized for processing very large data files:
-
-- **Parquet Files**: Memory-efficient processing for files >10GB using intelligent row group handling
-- **Avro Files**: Two-pass sampling approach for files >1GB that maintains constant memory usage
-- **Statistics Computation**: The `get_stats()` function processes files in chunks, maintaining constant memory usage even for very large files
-
-These optimizations apply to the `tail()`, `sample()`, and `get_stats()` functions (and their CLI counterparts), making OmniMorph suitable for working with datasets in the 10-100GB range without running out of memory.
-
-## Schema Inference
-
-OmniMorph provides robust schema inference for all supported file formats:
-
-- CSV: Custom inference engine that samples rows to determine column types
-- JSON: Uses GenSON to generate JSON Schema
-- Avro: Extracts embedded schema
-- Parquet: Extracts embedded schema
+- **CSV** (.csv)
+- **JSON** (.json)
+- **Avro** (.avro)
+- **Parquet** (.parquet)
