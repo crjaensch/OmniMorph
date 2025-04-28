@@ -210,7 +210,113 @@ def ask_output_path(message):
         raise
 
 
-# ---------- 3. Main loop ----------
+def handle_sql_suggestion(command_str, output_lines):
+    """Extract and handle SQL suggestions from AI assistance.
+    
+    Args:
+        command_str: The original command string
+        output_lines: List of output lines from command execution
+        
+    Returns:
+        bool: True if a suggestion was found and executed, False otherwise
+    """
+    output_text = '\n'.join(output_lines)
+    
+    # Look for indicators of AI suggestion - simpler approach
+    if 'Suggested fix:' not in output_text and '💡' not in output_text:
+        return False
+        
+    # Extract the suggested SQL query
+    sql_code = None
+    in_code_block = False
+    code_lines = []
+    
+    # Process each line to extract SQL code
+    for line in output_lines:
+        # Check for code block markers
+        if '```sql' in line:
+            in_code_block = True
+            continue
+        elif '```' in line and in_code_block:
+            in_code_block = False
+            sql_code = '\n'.join(code_lines)
+            break
+        elif in_code_block:
+            code_lines.append(line)
+    
+    # If no code block found, try to extract SQL statements directly
+    if not sql_code:
+        for i, line in enumerate(output_lines):
+            if any(keyword in line.upper() for keyword in ['SELECT ', 'CREATE ', 'INSERT ', 'UPDATE ', 'DELETE ', 'WITH ']):
+                # Found a line with SQL keywords
+                sql_start = i
+                sql_lines = [line]
+                # Collect SQL lines until we hit a likely end
+                for j in range(sql_start + 1, len(output_lines)):
+                    if not output_lines[j].strip() or ';' in output_lines[j]:
+                        if ';' in output_lines[j]:
+                            sql_lines.append(output_lines[j])
+                        break
+                    sql_lines.append(output_lines[j])
+                sql_code = '\n'.join(sql_lines)
+                break
+    
+    if sql_code:
+        # Clean up the SQL code
+        sql_code = sql_code.strip()
+        # Remove trailing semicolon if present
+        if sql_code.endswith(';'):
+            sql_code = sql_code[:-1]
+        
+        console.print("\n[bold cyan]AI suggested a SQL query fix.[/]")
+        if ask_flag("Would you like to run the suggested SQL query?", True):
+            # Extract the original command parts and replace the SQL query
+            parts = shlex.split(command_str)
+            # Find the SQL query position (last argument)
+            parts[-1] = sql_code
+            new_command = shlex.join(parts)
+            console.print(f"[dim]Will run:[/] {new_command}")
+            run_cli(new_command)
+            return True
+    
+    return False
+
+
+def run_cli(command_str):
+    if command_str is None:
+        return
+        
+    console.rule(f"[bold green]Executing[/] {command_str}")
+
+    # stream output live while showing Rich progress spinner
+    output_lines = []
+    with Progress(transient=True) as prog:
+        task = prog.add_task("omo-cli", start=False)
+        proc = subprocess.Popen(
+            command_str,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        prog.start_task(task)
+        for line in proc.stdout:
+            line_text = line.rstrip()
+            output_lines.append(line_text)
+            console.print(line_text)
+        proc.wait()
+        prog.update(task, completed=100)
+
+    # Check if this is a query command with AI suggestion
+    if 'query' in command_str:
+        handled = handle_sql_suggestion(command_str, output_lines)
+
+    if proc.returncode != 0:
+        console.print(f"[bold red]omo-cli exited with code {proc.returncode}[/]")
+    else:
+        console.print("[bold green]\u2713 Done[/]")
+
 
 def build_command(cmd_name):
     spec = COMMANDS[cmd_name]
@@ -279,35 +385,6 @@ def build_command(cmd_name):
         return shlex.join(parts)
     except KeyboardInterrupt:
         return None
-
-
-def run_cli(command_str):
-    if command_str is None:
-        return
-        
-    console.rule(f"[bold green]Executing[/] {command_str}")
-
-    # stream output live while showing Rich progress spinner
-    with Progress(transient=True) as prog:
-        task = prog.add_task("omo-cli", start=False)
-        proc = subprocess.Popen(
-            command_str,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        prog.start_task(task)
-        for line in proc.stdout:
-            console.print(line.rstrip())
-        proc.wait()
-        prog.update(task, completed=100)
-
-    if proc.returncode != 0:
-        console.print(f"[bold red]omo-cli exited with code {proc.returncode}[/]")
-    else:
-        console.print("[bold green]✓ Done[/]")
 
 
 def app():

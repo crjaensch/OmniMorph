@@ -270,6 +270,43 @@ Try using the correct table name. The file's stem is used as the table name:
 SELECT * FROM sales LIMIT 10
 ```
 
+When using `omo-wizard`, you can now directly run the suggested SQL query without having to copy and paste it, as shown in an example session below:
+
+```
+? Choose a command query
+? format (leave blank to skip)
+? Path for file ../test_omni-morph/yt_sample.parquet
+? sql_query (SQL query) Output fare amount and tip amount grouped by payment method from yt_sample
+Will run: omo-cli query ../test_omni-morph/yt_sample.parquet 'Output fare amount and tip amount grouped by payment method from yt_sample'
+? Proceed? Yes
+─ Executing omo-cli query ../test_omni-morph/yt_sample.parquet 'Output fare amount and tip amount grouped by payment method from yt_samp… ─
+omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--
+❌ SQL validation failed:
+Parser Error: syntax error at or near "Output"
+
+omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--💡 Suggested fix:
+
+The error occurs because "Output" is not valid SQL syntax; you should use a `SELECT` statement instead. Here's the corrected query:
+---
+SELECT payment_type, SUM(fare_amount) AS total_fare_amount, SUM(tip_amount) AS total_tip_amount
+FROM yt_sample
+GROUP BY payment_type;
+---
+AI suggested a SQL query fix.
+? Would you like to run the suggested SQL query? Yes
+─ Executing omo-cli query ../test_omni-morph/yt_sample.parquet 'SELECT payment_type, SUM(fare_amount) AS total_fare_amount, SUM(tip_amount) AS total_tip_amount
+FROM yt_sample
+GROUP BY payment_type;'
+omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--|   payment_type |   total_fare_amount |   total_tip_amount |
+|---------------:|--------------------:|-------------------:|
+|              0 |             2741.97 |              61.77 |
+|              1 |            12074.8  |            2654.96 |
+|              2 |             1798.9  |               0    |
+|              3 |              103.3  |               0    |
+|              4 |              -75.1  |               0    |
+✓ Done
+```
+
 This feature requires an OpenAI API key set in the `OPENAI_API_KEY` environment variable.
 
 ### Large File Processing
