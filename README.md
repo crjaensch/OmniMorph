@@ -283,7 +283,7 @@ Try using the correct table name. The file's stem is used as the table name:
 SELECT * FROM sales LIMIT 10
 ```
 
-When using `omo-wizard`, you can now directly run the suggested SQL query without having to copy and paste it, as shown in an example session below:
+You can directly run the suggested SQL query without having to copy and paste it, as shown in the example session below:
 
 ```
 ? Choose a command query
