@@ -52,6 +52,10 @@ def query(
     path_str = str(source)
     resolved_fmt = fmt or Format.from_path(path_str)
 
+    # Install and load Avro extension if needed
+    if resolved_fmt == Format.AVRO:
+        _ensure_avro_extension(con)
+
     _register_source(con, resolved_fmt, path_str)
 
     try:
@@ -99,11 +103,15 @@ def validate_sql(
     Raises:
         No exceptions are raised as errors are returned as strings.
     """
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"allow_unsigned_extensions": "true"})
 
     # Convert path to string for internal functions
     path_str = str(source)
     resolved_fmt = fmt or Format.from_path(path_str)
+
+    # Install and load Avro extension if needed
+    if resolved_fmt == Format.AVRO:
+        _ensure_avro_extension(con)
 
     _register_source(con, resolved_fmt, path_str, lazy=True)    # lazy views
     try:
@@ -171,6 +179,33 @@ def ai_suggest(sql: str, error_msg: str, schema_txt: str) -> str:
 # INTERNAL HELPERS
 # ---------------------------------------------------------------------------
 
+def _ensure_avro_extension(con):
+    """Ensure the Avro extension is installed and loaded in DuckDB.
+    
+    Args:
+        con: DuckDB connection object.
+        
+    Returns:
+        bool: True if the extension was successfully installed and loaded, False otherwise.
+    """
+    try:
+        # Check if the extension is already installed and loaded
+        result = con.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'avro' AND loaded").fetchall()
+        if result:
+            return True  # Extension is already installed and loaded
+            
+        # Install the extension if not already installed
+        con.execute("INSTALL avro FROM community;")
+        # Load the extension
+        con.execute("LOAD avro;")
+        
+        # Verify the extension is properly installed and loaded
+        result = con.execute("SELECT * FROM duckdb_extensions() WHERE extension_name = 'avro' AND loaded").fetchall()
+        return len(result) > 0
+    except duckdb.Error:
+        return False
+
+
 def _register_source(con, fmt, source, *, lazy=False):
     """Create DuckDB views for the specified data file.
     
@@ -209,9 +244,48 @@ def _register_source(con, fmt, source, *, lazy=False):
         )
 
     elif fmt == Format.AVRO:
-        table = ds.dataset(str(p), format="avro").to_table().slice(0, 0) if lazy \
-                else ds.dataset(str(p), format="avro").to_table()
-        con.register(name, table)
-
+        # Try to use DuckDB's native Avro support via the community extension first
+        avro_extension_loaded = _ensure_avro_extension(con)
+        
+        if avro_extension_loaded:
+            # Use DuckDB's native Avro support
+            try:
+                con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_avro('{p}')")
+                return
+            except duckdb.Error as exc:
+                # If read_avro fails, fall back to fastavro
+                pass
+        
+        # Fall back to fastavro
+        try:
+            import fastavro
+            import pandas as pd
+            import pyarrow as pa
+            
+            # Read the Avro file using fastavro
+            records = []
+            with open(str(p), 'rb') as f:
+                reader = fastavro.reader(f)
+                if not lazy:
+                    records = list(reader)
+                schema = reader.schema
+            
+            # If lazy loading, just create an empty DataFrame with the schema
+            if lazy and not records:
+                # Create an empty DataFrame with the correct schema
+                fields = schema.get('fields', [])
+                empty_data = {field['name']: [] for field in fields}
+                df = pd.DataFrame(empty_data)
+            else:
+                df = pd.DataFrame(records)
+            
+            # Convert to PyArrow table and register with DuckDB
+            table = pa.Table.from_pandas(df)
+            con.register(name, table)
+            return
+        except ImportError as imp_err:
+            raise QueryError(f"The fastavro package is required for Avro support: {str(imp_err)}") from imp_err
+        except Exception as exc:
+            raise QueryError(f"Failed to read Avro file using fastavro: {str(exc)}") from exc
     else:
         raise QueryError(f"Unsupported source file: {p}")
