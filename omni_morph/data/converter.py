@@ -17,7 +17,7 @@ Example
 >>> from omni_morph.data import convert
 >>> convert("events.avro", "events.parquet")
 
-Copyright © 2025 Christian R. Jaensch.  MIT license.
+Copyright 2025 Christian R. Jaensch.  MIT license.
 """
 from __future__ import annotations
 
@@ -35,7 +35,12 @@ __all__ = ["Format", "read", "write", "convert"]
 # ============================== public helpers ============================== #
 
 
-def read(path: Union[str, Path], fmt: Optional[Format] = None, **kwargs) -> pa.Table:
+def read(path: Union[str, Path], fmt: Optional[Format] = None, *, 
+        columns: Optional[list[str]] = None,
+        filters: Optional[Any] = None,
+        use_threads: bool = True,
+        use_dataset: bool = False,
+        **kwargs) -> pa.Table:
     """Read data from a file into a PyArrow Table.
     
     This function reads data from the specified file path and returns it as a
@@ -46,6 +51,15 @@ def read(path: Union[str, Path], fmt: Optional[Format] = None, **kwargs) -> pa.T
         path: A string or Path object pointing to the file to read.
         fmt: Optional format specification. If None, the format is inferred
              from the file extension.
+        columns: Optional list of column names to read. If provided, only these
+                columns will be read, which can significantly reduce I/O and memory usage.
+        filters: Optional filter expression for row filtering (primarily for Parquet).
+                This enables predicate push-down, keeping undesired row-groups on disk.
+        use_threads: Whether to use multiple threads for reading (default: True).
+                    This can significantly improve performance on multi-core systems.
+        use_dataset: Whether to use the PyArrow Dataset API for reading Parquet files.
+                    This enables more advanced features like column projection and
+                    predicate push-down (default: False).
         **kwargs: Additional keyword arguments passed to the underlying
                  PyArrow reader.
     
@@ -58,6 +72,16 @@ def read(path: Union[str, Path], fmt: Optional[Format] = None, **kwargs) -> pa.T
         IOError: If the file cannot be read or does not exist.
     """
     resolved_fmt = fmt or Format.from_path(path)
+    
+    # Add cross-cutting parameters to kwargs
+    if columns is not None:
+        kwargs['columns'] = columns
+    if filters is not None:
+        kwargs['filters'] = filters
+    kwargs['use_threads'] = use_threads
+    if resolved_fmt == Format.PARQUET:
+        kwargs['use_dataset'] = use_dataset
+    
     return _io._read_impl(Path(path), resolved_fmt, **kwargs)
 
 
@@ -65,6 +89,9 @@ def write(
     table: pa.Table,
     path: Union[str, Path],
     fmt: Optional[Format] = None,
+    *,
+    use_threads: bool = True,
+    compression: Optional[str] = None,
     **kwargs,
 ) -> pa.Table:
     """Write PyArrow Table to a file in the specified format.
@@ -79,6 +106,11 @@ def write(
         path: A string or Path object pointing to the destination file.
         fmt: Optional format specification. If None, the format is inferred
              from the file extension.
+        use_threads: Whether to use multiple threads for writing (default: True).
+                    This can significantly improve performance on multi-core systems.
+        compression: Compression algorithm to use (primarily for Parquet).
+                    For Parquet, 'zstd' is recommended for a good balance of
+                    compression ratio and speed.
         **kwargs: Additional keyword arguments passed to the underlying
                  PyArrow writer.
     
@@ -91,6 +123,12 @@ def write(
         IOError: If the file cannot be written to the specified path.
     """
     resolved_fmt = fmt or Format.from_path(path)
+    
+    # Add cross-cutting parameters to kwargs
+    kwargs['use_threads'] = use_threads
+    if compression is not None:
+        kwargs['compression'] = compression
+    
     _io._write_impl(table, Path(path), resolved_fmt, **kwargs)
     return table
 
@@ -101,6 +139,11 @@ def convert(
     *,
     src_fmt: Optional[Format] = None,
     dst_fmt: Optional[Format] = None,
+    columns: Optional[list[str]] = None,
+    filters: Optional[Any] = None,
+    use_threads: bool = True,
+    use_dataset: bool = False,
+    compression: Optional[str] = None,
     read_kwargs: Optional[dict[str, Any]] = None,
     write_kwargs: Optional[dict[str, Any]] = None,
 ) -> pa.Table:
@@ -117,6 +160,18 @@ def convert(
                 inferred from the source file extension.
         dst_fmt: Optional destination format specification. If None, the format
                 is inferred from the destination file extension.
+        columns: Optional list of column names to read. If provided, only these
+                columns will be read, which can significantly reduce I/O and memory usage.
+        filters: Optional filter expression for row filtering (primarily for Parquet).
+                This enables predicate push-down, keeping undesired row-groups on disk.
+        use_threads: Whether to use multiple threads for reading and writing (default: True).
+                    This can significantly improve performance on multi-core systems.
+        use_dataset: Whether to use the PyArrow Dataset API for reading Parquet files.
+                    This enables more advanced features like column projection and
+                    predicate push-down (default: False).
+        compression: Compression algorithm to use for writing (primarily for Parquet).
+                    For Parquet, 'zstd' is recommended for a good balance of
+                    compression ratio and speed.
         read_kwargs: Optional dictionary of keyword arguments passed to the
                     underlying PyArrow reader.
         write_kwargs: Optional dictionary of keyword arguments passed to the
@@ -132,5 +187,33 @@ def convert(
         IOError: If the source file cannot be read or the destination file
                 cannot be written.
     """
-    table = read(src, src_fmt, **(read_kwargs or {}))
-    return write(table, dst, dst_fmt, **(write_kwargs or {}))
+    # Initialize kwargs dictionaries if not provided
+    read_kwargs = read_kwargs or {}
+    write_kwargs = write_kwargs or {}
+    
+    # Resolve formats
+    resolved_src_fmt = src_fmt or Format.from_path(src)
+    resolved_dst_fmt = dst_fmt or Format.from_path(dst)
+    
+    # Add cross-cutting parameters to read_kwargs based on source format
+    if columns is not None:
+        read_kwargs['columns'] = columns
+    if filters is not None and resolved_src_fmt == Format.PARQUET:
+        read_kwargs['filters'] = filters
+    if resolved_src_fmt in [Format.PARQUET, Format.CSV]:
+        read_kwargs['use_threads'] = use_threads
+    if resolved_src_fmt == Format.PARQUET:
+        read_kwargs['use_dataset'] = use_dataset
+    
+    # Add cross-cutting parameters to write_kwargs based on destination format
+    if resolved_dst_fmt == Format.PARQUET:
+        # Note: use_threads is not directly supported by the Parquet writer in this version
+        # Only add compression if specified
+        if compression is not None:
+            write_kwargs['compression'] = compression
+    
+    # Read the source file
+    table = read(src, fmt=resolved_src_fmt, **read_kwargs)
+    
+    # Write to the destination file
+    return write(table, dst, fmt=resolved_dst_fmt, **write_kwargs)

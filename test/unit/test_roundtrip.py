@@ -40,11 +40,11 @@ def test_conversion_roundtrip(tmp_path: Path, sample_table: pa.Table, src_fmt, d
     dst_file = tmp_path / f"converted.{dst_fmt.name.lower()}"
 
     # write original source
-    omd.write(sample_table, src_file, src_fmt)
+    omd.write(sample_table, src_file, fmt=src_fmt)
 
     # perform conversion
     omd.convert(src_file, dst_file, src_fmt=src_fmt, dst_fmt=dst_fmt)
 
     # read back and compare
-    roundtrip = omd.read(dst_file, dst_fmt)
+    roundtrip = omd.read(dst_file, fmt=dst_fmt)
     assert sample_table.equals(roundtrip), f"{src_fmt}->{dst_fmt} mismatch"

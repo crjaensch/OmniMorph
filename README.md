@@ -16,6 +16,7 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
   - [When to Use Wizard vs CLI](#when-to-use-wizard-vs-cli)
   - [Example Wizard Session](#example-wizard-session)
 - [Features](#features)
+  - [Performance Optimizations](#performance-optimizations)
   - [Statistical Analysis](#statistical-analysis)
   - [SQL Queries with DuckDB](#sql-queries-with-duckdb)
   - [AI-Powered SQL Assistance](#ai-powered-sql-assistance)
@@ -227,6 +228,18 @@ The wizard now includes a file memory feature that allows you to remember a data
 This feature is especially useful when performing multiple operations on the same data file, such as checking the schema, running statistics, and executing queries in sequence.
 
 ## Features
+
+### Performance Optimizations
+
+OmniMorph is optimized for high-performance data processing:
+
+- **Memory-efficient processing**: Processes data in chunks to handle files of any size with minimal memory footprint
+- **Multi-threaded operations**: Leverages multiple CPU cores for faster processing when available
+- **Memory mapping**: Uses memory mapping for Parquet files to avoid unnecessary data copies
+- **Column projection**: Reads only the columns you need, significantly reducing I/O and memory usage
+- **Predicate push-down**: Filters data at the storage layer for Parquet files, keeping undesired data on disk
+- **Optimized compression**: Uses zstd compression for Parquet files, offering 20-40% smaller files with faster reads
+- **Schema memoization**: Caches schema conversions to avoid redundant computations for nested schemas
 
 ### Statistical Analysis
 
