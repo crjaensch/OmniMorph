@@ -14,7 +14,7 @@ TEST_CASES = [
 @ pytest.mark.parametrize("fmt, filename", TEST_CASES)
 def test_schema_to_markdown_basic(fmt, filename):
     # Locate sample file
-    data_dir = Path(__file__).parent / "data" / "sample-data" / fmt
+    data_dir = Path(__file__).parent.parent / "data" / "sample-data" / fmt
     file_path = data_dir / filename
     # Extract schema
     schema = get_schema(str(file_path))

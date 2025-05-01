@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import pytest
 
-base_dir = Path(__file__).parent / "data" / "sample-data"
+base_dir = Path(__file__).parent.parent / "data" / "sample-data"
 
 from omni_morph.data.statistics import get_stats
 
