@@ -361,17 +361,42 @@ OmniMorph can also be used as a Python library in your own projects.
 ### File Format Conversion
 
 ```python
-from omni_morph.data import convert, Format, write
 import pyarrow as pa
+from omni_morph.data import convert, read, write, Format
 
-# Convert between different file formats
-convert("my_file.avro", "my_file.parquet")          # Avro  → Parquet
+# Basic conversion between formats
+convert("data.csv", "data.parquet")                 # CSV → Parquet
 convert("data.parquet", "out/data.csv")             # Parquet → CSV
-convert("records.json", "records_converted.avro")   # JSON   → Avro
+convert("records.json", "records_converted.avro")   # JSON → Avro
 
-# Write PyArrow tables directly
-table = pa.table({"x": [1, 2, 3]})
-write(table, Path("my_table.avro"), Format.AVRO)
+
+# Explicit format specification
+convert("data.txt", "data.json", src_fmt=Format.CSV, dst_fmt=Format.JSON)   # CSV → JSON
+
+# Performance optimizations
+# Read only specific columns (reduces I/O and memory usage)
+table = read("large_data.parquet", columns=["id", "name", "value"])
+
+# Use predicate push-down for Parquet files (filters data at storage layer)
+import pyarrow.dataset as ds
+filter_expr = ds.field("date") > "2025-01-01"
+table = read("large_data.parquet", filters=filter_expr, use_dataset=True)
+
+# Enable memory mapping and multi-threading
+table = read("large_data.parquet", use_threads=True, memory_map=True)
+
+# Write with optimized compression
+write(table, "optimized_data.parquet", compression="zstd")
+
+# Complete conversion with all performance options
+convert(
+    "large_data.csv", 
+    "filtered_data.parquet",
+    columns=["id", "date", "value"], 
+    use_threads=True,
+    use_dataset=True,
+    compression="zstd"
+)
 ```
 
 ### Data Inspection
