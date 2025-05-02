@@ -136,6 +136,9 @@ poetry run omo-cli stats data.txt --format csv
 # Adjust the sample size for t-digest median approximation
 poetry run omo-cli stats large_data.parquet --sample-size 5000
 
+# Use DuckDB's fast statistics generation (only compatible with --format)
+poetry run omo-cli stats data.csv --fast
+
 # Convert from one format to another
 poetry run omo-cli to-json data.csv output.json
 
@@ -262,6 +265,14 @@ OmniMorph provides comprehensive statistical analysis of your data files. Here's
 | gender | 3 | Female · 482 ; Male · 451 ; __NULL__ · 67 |
 
 This human-readable format makes it easy to quickly understand the characteristics of your data.
+
+For large datasets, you can use the `--fast` option which leverages DuckDB's built-in summarization capabilities:
+
+```bash
+poetry run omo-cli stats large_data.parquet --fast
+```
+
+The fast option provides similar statistics but processes data much more efficiently. Note that when using `--fast`, only the `--format` option is compatible; other options like `--columns` and `--sample-size` cannot be used.
 
 ### SQL Queries with DuckDB
 

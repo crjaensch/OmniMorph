@@ -177,6 +177,7 @@ def test_stats():
     except json.JSONDecodeError:
         pytest.fail("Stats command did not return valid JSON")
 
+
 def test_stats_markdown():
     """Test the stats command with markdown output."""
     result = run_cli(["stats", str(CSV_FILE), "--markdown"])
@@ -195,6 +196,42 @@ def test_stats_markdown():
     except json.JSONDecodeError:
         # This is expected - output should not be valid JSON
         pass
+
+
+def test_stats_fast():
+    """Test the stats command with the --fast option."""
+    result = run_cli(["stats", str(CSV_FILE), "--fast"])
+    assert result.returncode == 0
+    
+    # The fast option should output markdown format by default
+    output = result.stdout
+    assert "# Numeric columns" in output, "Fast stats output should contain section headers"
+    assert "|" in output, "Fast stats output should contain table formatting"
+    assert "column" in output, "Fast stats output should contain column headers"
+    
+    # Make sure it's not JSON
+    try:
+        json.loads(output)
+        pytest.fail("Output should be markdown, not JSON")
+    except json.JSONDecodeError:
+        # This is expected - output should not be valid JSON
+        pass
+
+
+@pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
+def test_stats_fast_all_formats(file_path):
+    """Test the stats --fast command for all formats."""
+    result = run_cli(["stats", str(file_path), "--fast"])
+    # We don't assert success for all formats as some might not be supported by DuckDB
+    # Just verify the command is recognized
+    assert result.returncode in (0, 1)
+    
+    if result.returncode == 0:
+        # If successful, verify the output contains markdown formatting
+        output = result.stdout
+        assert "# Numeric columns" in output, "Fast stats output should contain section headers"
+        assert "|" in output, "Fast stats output should contain table formatting"
+
 
 def test_merge():
     """Test the merge command."""

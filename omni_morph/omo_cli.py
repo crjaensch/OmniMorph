@@ -101,6 +101,7 @@ def stats(
     format: str = typer.Option(None, "--format", "-f", help="Force specific format (avro, parquet, csv, json)"),
     sample_size: int = typer.Option(2048, "--sample-size", help="Number of samples for t-digest reservoir per column"),
     markdown: bool = typer.Option(False, "--markdown", help="Output in markdown format instead of JSON"),
+    fast: bool = typer.Option(False, "--fast", help="Use DuckDB's Summarize for faster statistics generation"),
 ):
     """
     Print statistics about a file's columns.
@@ -109,30 +110,74 @@ def stats(
     For categorical columns: distinct count and top 5 values.
     """
     try:
-        # Convert format string to Format enum if provided
-        fmt = Format(format) if format else None
-        
-        # Parse comma-separated columns into list
-        if columns:
-            columns = [col.strip() for col in columns.split(",")]
+        # Validate option combinations
+        if fast and (columns or sample_size != 2048 or markdown):
+            typer.echo("Error: When using --fast, the options --columns, --sample-size, and --markdown cannot be used.", err=True)
+            typer.echo("Use either 'stats --fast [--format FORMAT] FILE' or 'stats [--markdown] [--columns COLS] [--sample-size N] [--format FORMAT] FILE'", err=True)
+            raise typer.Exit(code=1)
+            
+        # If fast option is enabled, use DuckDB's Summarize
+        if fast:
+            # Extract the table name from the file path (stem without extension)
+            table_name = Path(file_path).stem
+            
+            # Build the SQL query
+            sql_query = f"SUMMARIZE {table_name};"
+            
+            # Use the query engine to execute the query
+            from omni_morph.data.query_engine import query
+            import tempfile
+            import os
+            
+            # Force format if provided
+            fmt = Format(format) if format else None
+            
+            # Execute the query and get the results as a pandas DataFrame
+            result_df = query(sql_query, file_path, fmt=fmt, return_type="pandas")
+            
+            # Save to a temporary markdown file for processing
+            with tempfile.NamedTemporaryFile(suffix='.md', delete=False) as temp_file:
+                temp_path = temp_file.name
+                # Convert DataFrame to markdown and save
+                with open(temp_path, 'w') as f:
+                    f.write(result_df.to_markdown(index=False))
+            
+            try:
+                # Convert the summary to our format
+                from omni_morph.utils.convert_summary import convert_summary
+                result_md = convert_summary(temp_path)
+                
+                # Output the results
+                typer.echo(result_md)
+            finally:
+                # Clean up the temporary file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
         else:
-            columns = None
-        
-        # Get statistics for the file
-        stats_result = get_stats(
-            path=file_path,
-            fmt=fmt,
-            columns=columns,
-            sample_size=sample_size
-        )
-        
-        # Output the results based on format preference
-        if markdown:
-            from omni_morph.utils.json2md import stats_to_markdown
-            typer.echo(stats_to_markdown(stats_result))
-        else:
-            # Output the results as JSON
-            typer.echo(json.dumps(stats_result, indent=2, default=str))
+            # Convert format string to Format enum if provided
+            fmt = Format(format) if format else None
+            
+            # Parse comma-separated columns into list
+            if columns:
+                columns = [col.strip() for col in columns.split(",")]
+            else:
+                columns = None
+            
+            # Get statistics for the file
+            stats_result = get_stats(
+                path=file_path,
+                fmt=fmt,
+                columns=columns,
+                sample_size=sample_size
+            )
+            
+            # Output the results based on format preference
+            if markdown:
+                from omni_morph.utils.json2md import stats_to_markdown
+                typer.echo(stats_to_markdown(stats_result))
+            else:
+                # Output the results as JSON
+                typer.echo(json.dumps(stats_result, indent=2, default=str))
     except Exception as e:
         typer.echo(f"Error computing statistics: {e}", err=True)
         raise typer.Exit(code=1)

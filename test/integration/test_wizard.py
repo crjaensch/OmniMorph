@@ -79,10 +79,11 @@ def test_build_command_tail():
 
 def test_build_command_stats():
     """Test that build_command correctly builds a stats command."""
+    # Test with fast mode disabled
     with patch("omni_morph.omo_wizard.ask_path", return_value=str(CSV_FILE)), \
          patch("omni_morph.omo_wizard.ask_text", return_value=""), \
          patch("omni_morph.omo_wizard.ask_int", return_value=2048), \
-         patch("omni_morph.omo_wizard.ask_flag", return_value=True):
+         patch("omni_morph.omo_wizard.ask_flag", side_effect=[False, True, True]):  # [fast=False, markdown=True, other options=True]
         
         command_str = build_command("stats")
         
@@ -90,6 +91,21 @@ def test_build_command_stats():
         assert "--markdown" in command_str
         assert "--sample-size 2048" in command_str
         assert str(CSV_FILE) in command_str
+    
+    # Test with fast mode enabled
+    with patch("omni_morph.omo_wizard.ask_path", return_value=str(CSV_FILE)), \
+         patch("omni_morph.omo_wizard.ask_text", return_value="json"), \
+         patch("omni_morph.omo_wizard.ask_flag", side_effect=[True, True]):  # [fast=True, format=True]
+        
+        command_str = build_command("stats")
+        
+        assert "omo-cli stats" in command_str
+        assert "--fast" in command_str
+        assert "--format json" in command_str
+        assert str(CSV_FILE) in command_str
+        # These options should not be present with --fast
+        assert "--markdown" not in command_str
+        assert "--sample-size" not in command_str
 
 
 def test_build_command_to_json():
@@ -177,10 +193,11 @@ def test_head_command_with_different_files(file_path):
 @pytest.mark.parametrize("file_path", [CSV_FILE])
 def test_stats_command_with_options(file_path):
     """Test building the stats command with different options."""
+    # Test with fast mode disabled
     with patch("omni_morph.omo_wizard.ask_path", return_value=str(file_path)), \
          patch("omni_morph.omo_wizard.ask_text", return_value=""), \
          patch("omni_morph.omo_wizard.ask_int", return_value=2048), \
-         patch("omni_morph.omo_wizard.ask_flag", return_value=True):
+         patch("omni_morph.omo_wizard.ask_flag", side_effect=[False, True, True]):  # [fast=False, markdown=True, other options=True]
         
         command_str = build_command("stats")
         
@@ -188,6 +205,21 @@ def test_stats_command_with_options(file_path):
         assert "--markdown" in command_str
         assert "--sample-size 2048" in command_str
         assert str(file_path) in command_str
+    
+    # Test with fast mode enabled
+    with patch("omni_morph.omo_wizard.ask_path", return_value=str(file_path)), \
+         patch("omni_morph.omo_wizard.ask_text", return_value="parquet"), \
+         patch("omni_morph.omo_wizard.ask_flag", side_effect=[True, True]):  # [fast=True, format=True]
+        
+        command_str = build_command("stats")
+        
+        assert "omo-cli stats" in command_str
+        assert "--fast" in command_str
+        assert "--format parquet" in command_str
+        assert str(file_path) in command_str
+        # These options should not be present with --fast
+        assert "--markdown" not in command_str
+        assert "--sample-size" not in command_str
 
 
 def test_to_json_command_with_options():

@@ -55,6 +55,7 @@ COMMANDS = {
     "stats": {
         "args": [
             {"name": "--markdown", "kind": "flag", "default": False},
+            {"name": "--fast", "kind": "flag", "default": False},
             {"name": "--columns", "kind": "text", "optional": True},
             {"name": "--format", "kind": "text", "optional": True},
             {"name": "--sample-size", "kind": "int", "default": 2048},
@@ -341,6 +342,7 @@ def run_cli(command_str):
 
 
 def build_command(cmd_name):
+    """Build a command string based on user input for the specified command."""
     global REMEMBERED_FILE_PATH
     spec = COMMANDS[cmd_name]
     parts = ["omo-cli"]
@@ -360,10 +362,44 @@ def build_command(cmd_name):
     parts.append(cmd_name)
 
     try:
+        # Special handling for stats command with --fast option
+        if cmd_name == "stats":
+            # First ask if the user wants to use the fast option
+            use_fast = ask_flag("Use fast mode (DuckDB-based statistics)?")
+            if use_fast:
+                parts.append("--fast")
+                # When using fast mode, only process the file and format options
+                for arg in spec["args"]:
+                    kind = arg["kind"]
+                    name = arg["name"]
+                    is_positional = arg.get("positional", False)
+                    
+                    # Only allow file and format options with --fast
+                    if name == "file" or name == "--format":
+                        if kind == "path":
+                            value = ask_path(f"Path for {name.lstrip('-')}")
+                            if is_positional:
+                                parts.append(str(value))
+                            else:
+                                parts.extend([name, str(value)])
+                        elif kind == "text":
+                            value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
+                            if value:
+                                if is_positional:
+                                    parts.append(value)
+                                else:
+                                    parts.extend([name, value])
+                return shlex.join(parts)  # Return early with only these options
+        
+        # Normal processing for all other commands or stats without --fast
         for arg in spec["args"]:
             kind = arg["kind"]
             name = arg["name"]
             is_positional = arg.get("positional", False)
+            
+            # Skip the --fast option for stats if we're in the normal path
+            if cmd_name == "stats" and name == "--fast":
+                continue
 
             if kind == "path":
                 value = ask_path(f"Path for {name.lstrip('-')}")
