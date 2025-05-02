@@ -137,7 +137,7 @@ poetry run omo-cli stats data.txt --format csv
 poetry run omo-cli stats large_data.parquet --sample-size 5000
 
 # Use DuckDB's fast statistics generation (only compatible with --format)
-poetry run omo-cli stats data.csv --fast
+poetry run omo-cli stats --fast data.csv
 
 # Convert from one format to another
 poetry run omo-cli to-json data.csv output.json
@@ -269,7 +269,7 @@ This human-readable format makes it easy to quickly understand the characteristi
 For large datasets, you can use the `--fast` option which leverages DuckDB's built-in summarization capabilities:
 
 ```bash
-poetry run omo-cli stats large_data.parquet --fast
+poetry run omo-cli stats --fast large_data.parquet
 ```
 
 The fast option provides similar statistics but processes data much more efficiently. Note that when using `--fast`, only the `--format` option is compatible; other options like `--columns` and `--sample-size` cannot be used.
