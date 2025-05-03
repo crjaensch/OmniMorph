@@ -61,7 +61,11 @@ def _parse_summary_md(path: str) -> pd.DataFrame:
         "count", "null_percentage", "approx_unique"
     }
     for col in numeric_cols & set(df.columns):
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except (ValueError, TypeError):
+            # Keep as is if conversion fails
+            pass
 
     return df
 

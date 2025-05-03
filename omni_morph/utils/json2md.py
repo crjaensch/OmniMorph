@@ -5,6 +5,7 @@ formatted strings for better human readability in CLI output.
 """
 
 from typing import Dict, Any, List
+import pandas as pd
 
 
 def stats_to_markdown(stats_data: Dict[str, Dict[str, Any]]) -> str:
@@ -37,45 +38,45 @@ def stats_to_markdown(stats_data: Dict[str, Dict[str, Any]]) -> str:
     
     markdown = []
     
-    # Generate markdown for numeric columns
+    # Generate markdown for numeric columns using pandas DataFrame
     if numeric_cols:
         markdown.append("# Numeric columns\n")
         
-        # Create table header
-        markdown.append("| column | non-null count | min | max | mean | median |")
-        markdown.append("| ------ | ------------- | --- | --- | ---- | ------ |")
-        
-        # Add rows for each numeric column
+        # Create DataFrame for numeric columns
+        numeric_data = []
         for col_name, stats in numeric_cols.items():
-            row = [
-                col_name,
-                str(stats.get("count", 0)),
-                _format_value(stats.get("min")),
-                _format_value(stats.get("max")),
-                _format_value(stats.get("mean")),
-                _format_value(stats.get("median"))
-            ]
-            markdown.append(f"| {' | '.join(row)} |")
+            numeric_data.append({
+                "column": col_name,
+                "non-null count": stats.get("count", 0),
+                "min": _format_value(stats.get("min")),
+                "max": _format_value(stats.get("max")),
+                "mean": _format_value(stats.get("mean")),
+                "median": _format_value(stats.get("median"))
+            })
         
-        markdown.append("")
+        # Convert to DataFrame and generate markdown
+        if numeric_data:
+            df = pd.DataFrame(numeric_data)
+            markdown.append(df.to_markdown(index=False, tablefmt="github"))
+            markdown.append("")
     
-    # Generate markdown for categorical columns
+    # Generate markdown for categorical columns using pandas DataFrame
     if categorical_cols:
         markdown.append("# Categorical columns\n")
         
-        # Create table header
-        markdown.append("| column | distinct | top-5 categories (value · count) |")
-        markdown.append("| ------ | -------- | ------------------------------- |")
-        
-        # Add rows for each categorical column
+        # Create DataFrame for categorical columns
+        categorical_data = []
         for col_name, stats in categorical_cols.items():
-            top5_str = _format_top5(stats.get("top5", []))
-            row = [
-                col_name,
-                str(stats.get("distinct", 0)),
-                top5_str
-            ]
-            markdown.append(f"| {' | '.join(row)} |")
+            categorical_data.append({
+                "column": col_name,
+                "distinct": stats.get("distinct", 0),
+                "top-5 categories (value · count)": _format_top5(stats.get("top5", []))
+            })
+        
+        # Convert to DataFrame and generate markdown
+        if categorical_data:
+            df = pd.DataFrame(categorical_data)
+            markdown.append(df.to_markdown(index=False, tablefmt="github"))
     
     return "\n".join(markdown)
 
@@ -120,8 +121,7 @@ def _format_top5(top5: List[Dict[str, Any]]) -> str:
 
 
 def schema_to_markdown(schema_data: Dict[str, Any]) -> str:
-    """
-    Convert schema or JSON schema data to a Markdown formatted string.
+    """Convert schema or JSON schema data to a Markdown formatted string.
 
     Renders a Markdown table showing each field's name, data type, nullability, and description.
 
@@ -133,17 +133,12 @@ def schema_to_markdown(schema_data: Dict[str, Any]) -> str:
     Returns:
         str: Markdown formatted representation of the schema.
     """
-    markdown = []
-    
     # Add title
-    markdown.append("# 📦 Data Schema Overview\n")
-    
-    # Create table header
-    markdown.append("| Field Name | Data Type | Nullable | Description |")
-    markdown.append("| ---------- | --------- | -------- | ----------- |")
+    markdown = ["\n# 📦 Data Schema Overview\n"]
     
     # Normalize fields list
-    fields: List[Dict[str, Any]] = []
+    fields = []
+    
     # JSON Schema 'properties' branch
     if isinstance(schema_data.get("properties"), dict):
         for fname, props in schema_data["properties"].items():
@@ -153,15 +148,20 @@ def schema_to_markdown(schema_data: Dict[str, Any]) -> str:
                 nullable = "✅" if "null" in ftype else "❌"
                 types = [t for t in ftype if t != "null"]
                 dtype = ",".join(types)
+                # Simplify timestamp types
+                dtype = dtype.replace("timestamp[us]", "timestamp")
             else:
                 nullable = "❌"
                 dtype = str(ftype)
+                # Simplify timestamp types
+                dtype = dtype.replace("timestamp[us]", "timestamp")
             fields.append({
-                "name": fname,
-                "type": dtype,
-                "nullable": nullable,
-                "description": props.get("description", "")
+                "Field Name": fname,
+                "Data Type": dtype,
+                "Nullable": nullable,
+                "Description": props.get("description", "")
             })
+    
     # Avro record schema branch
     elif schema_data.get("type") == "record" and isinstance(schema_data.get("fields"), list):
         for f in schema_data["fields"]:
@@ -172,33 +172,40 @@ def schema_to_markdown(schema_data: Dict[str, Any]) -> str:
                 nullable = "✅" if "null" in ftype else "❌"
                 types = [t for t in ftype if t != "null"]
                 dtype = ",".join(types)
+                # Simplify timestamp types
+                dtype = dtype.replace("timestamp[us]", "timestamp")
             else:
                 nullable = "❌"
                 dtype = str(ftype)
+                # Simplify timestamp types
+                dtype = dtype.replace("timestamp[us]", "timestamp")
             fields.append({
-                "name": name,
-                "type": dtype,
-                "nullable": nullable,
-                "description": f.get("doc", "")
+                "Field Name": name,
+                "Data Type": dtype,
+                "Nullable": nullable,
+                "Description": f.get("doc", "")
             })
+    
     # Simple field definitions list branch
     elif isinstance(schema_data.get("fields"), list):
         for f in schema_data["fields"]:
+            nullable = "✅" if f.get("nullable") else "❌"
+            dtype = str(f.get("type", ""))
+            # Simplify timestamp types
+            dtype = dtype.replace("timestamp[us]", "timestamp")
             fields.append({
-                "name": f.get("name", ""),
-                "type": str(f.get("type", "")),
-                "nullable": "✅" if f.get("nullable") else "❌",
-                "description": f.get("description", "")
+                "Field Name": f.get("name", ""),
+                "Data Type": dtype,
+                "Nullable": nullable,
+                "Description": f.get("description", "")
             })
-    # Add rows for each field definition
-    for field in fields:
-        name = field.get("name", "")
-        data_type = field.get("type", "")
-        # nullable may be stored as bool or already as checkmark
-        nullable = field.get("nullable")
-        nullable_mark = "✅" if nullable is True or nullable == "✅" else "❌"
-        description = field.get("description", "")
-        row = [name, data_type, nullable_mark, description]
-        markdown.append(f"| {' | '.join(row)} |")
-     
+    
+    # Add rows for each field definition using pandas for alignment
+    if fields:
+        # Create a DataFrame for better alignment
+        df = pd.DataFrame(fields)
+        # Use github format with additional styling
+        table_lines = df.to_markdown(index=False, tablefmt="github")
+        markdown.append(table_lines)
+    
     return "\n".join(markdown)

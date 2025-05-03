@@ -15,6 +15,7 @@ from prompt_toolkit.completion import PathCompleter
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress
+from omni_morph.data.formats import Format
 
 console = Console()
 
@@ -330,7 +331,10 @@ def run_cli(command_str):
             console.print(line_text)
         proc.wait()
         prog.update(task, completed=100)
-
+        
+        # Add a newline after progress bar completes to ensure proper output alignment
+        console.print("")
+    
     # Check if this is a query command with AI suggestion
     if 'query' in command_str:
         handled = handle_sql_suggestion(command_str, output_lines)
@@ -362,6 +366,9 @@ def build_command(cmd_name):
     parts.append(cmd_name)
 
     try:
+        # Track the current file path for format detection without changing REMEMBERED_FILE_PATH
+        current_file_path = None
+        
         # Special handling for stats command with --fast option
         if cmd_name == "stats":
             # First ask if the user wants to use the fast option
@@ -378,11 +385,25 @@ def build_command(cmd_name):
                     if name == "file" or name == "--format":
                         if kind == "path":
                             value = ask_path(f"Path for {name.lstrip('-')}")
+                            if name == "file":
+                                current_file_path = value
                             if is_positional:
                                 parts.append(str(value))
                             else:
                                 parts.extend([name, str(value)])
-                        elif kind == "text":
+                        elif kind == "text" and name == "--format":
+                            # Skip format prompt if we can determine it from the file extension
+                            file_to_check = current_file_path or REMEMBERED_FILE_PATH
+                            if file_to_check:
+                                try:
+                                    Format.from_path(file_to_check)
+                                    # Format can be determined from extension, skip the prompt
+                                    console.print(f"[dim]Format detected from file extension, skipping format prompt[/]")
+                                    continue
+                                except ValueError:
+                                    # Format cannot be determined, ask for it
+                                    pass
+                            
                             value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
                             if value:
                                 if is_positional:
@@ -403,6 +424,8 @@ def build_command(cmd_name):
 
             if kind == "path":
                 value = ask_path(f"Path for {name.lstrip('-')}")
+                if name == "file":
+                    current_file_path = value
                 if is_positional:
                     parts.append(str(value))
                 else:
@@ -436,6 +459,19 @@ def build_command(cmd_name):
                     parts.append(name)
 
             elif kind == "text":
+                # Skip format prompt if we can determine it from the file extension
+                if name == "--format":
+                    file_to_check = current_file_path or REMEMBERED_FILE_PATH
+                    if file_to_check:
+                        try:
+                            Format.from_path(file_to_check)
+                            # Format can be determined from extension, skip the prompt
+                            console.print(f"[dim]Format detected from file extension, skipping format prompt[/]")
+                            continue
+                        except ValueError:
+                            # Format cannot be determined, ask for it
+                            pass
+                
                 value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
                 if value:
                     if is_positional:

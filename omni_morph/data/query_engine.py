@@ -72,7 +72,7 @@ def query(
     import pandas as pd, sys
     pd.set_option("display.max_columns", None)
     df = result.df()
-    sys.stdout.write(df.to_markdown(index=False) + "\n")
+    sys.stdout.write("\n" + df.to_markdown(index=False) + "\n")
     return None
 
 # ---------------------------------------------------------------------------
