@@ -7,6 +7,8 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from rich.live import Live
+from rich.panel import Panel
 
 from InquirerPy import inquirer
 from InquirerPy.validator import NumberValidator
@@ -14,7 +16,7 @@ from InquirerPy.base.control import Choice
 from prompt_toolkit.completion import PathCompleter
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.progress import Progress
+from rich.progress import Progress, BarColumn, TimeElapsedColumn
 from omni_morph.data.formats import Format
 
 console = Console()
@@ -312,28 +314,67 @@ def run_cli(command_str):
         
     console.rule(f"[bold green]Executing[/] {command_str}")
 
-    # stream output live while showing Rich progress spinner
+    # Create a separate area for command output
     output_lines = []
-    with Progress(transient=True) as prog:
-        task = prog.add_task("omo-cli", start=False)
-        proc = subprocess.Popen(
-            command_str,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        prog.start_task(task)
+    
+    # Create a separate console for command output to avoid interference with progress bar
+    output_console = Console(highlight=False)
+    
+    # Print a header for the output to ensure separation from the progress bar
+    console.print("Command Output:")
+    console.print("─" * 80)
+    
+    # Create a Live display that will properly manage the progress bar
+    from rich.live import Live
+    from time import time
+    
+    # Start the subprocess first
+    proc = subprocess.Popen(
+        command_str,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    
+    # Create progress bar with proper time tracking
+    progress = Progress(
+        "[progress.description]{task.description}",
+        BarColumn(),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        TimeElapsedColumn(),
+        auto_refresh=False,
+        expand=True
+    )
+    
+    # Add a task and get its ID
+    task_id = progress.add_task("omo-cli", total=100)
+    
+    # Track start time
+    start_time = time()
+    
+    # Use Live display to manage the progress bar
+    with Live(progress, refresh_per_second=10, console=console) as live:
+        # Process and display output
         for line in proc.stdout:
             line_text = line.rstrip()
             output_lines.append(line_text)
-            console.print(line_text)
+            output_console.print(line_text, end="\n")
+            # Update progress to show activity
+            progress.update(task_id, advance=0, refresh=True)
+            
+        # Wait for process to complete
         proc.wait()
-        prog.update(task, completed=100)
         
-        # Add a newline after progress bar completes to ensure proper output alignment
-        console.print("")
+        # Calculate elapsed time
+        elapsed = time() - start_time
+        
+        # Update progress to 100% with correct elapsed time
+        progress.update(task_id, completed=100, refresh=True, elapsed=elapsed)
+    
+    # Add a separator after the output
+    console.print("─" * 80)
     
     # Check if this is a query command with AI suggestion
     if 'query' in command_str:
