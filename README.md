@@ -311,37 +311,57 @@ You can directly run the suggested SQL query without having to copy and paste it
 
 ```
 ? Choose a command query
-? format (leave blank to skip)
-? Path for file ../test_omni-morph/yt_sample.parquet
-? sql_query (SQL query) Output fare amount and tip amount grouped by payment method from yt_sample
-Will run: omo-cli query ../test_omni-morph/yt_sample.parquet 'Output fare amount and tip amount grouped by payment method from yt_sample'
+Format detected from file extension, skipping format prompt
+? Use remembered file: ../test_omni-morph/yt_2025_01.parquet? Yes
+? sql_query (SQL query) Output average and maximum fare amount as well as tip amount grouped by payment method and sort by decreasing fare amount
 ? Proceed? Yes
-─ Executing omo-cli query ../test_omni-morph/yt_sample.parquet 'Output fare amount and tip amount grouped by payment method from yt_samp… ─
-omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--
+─ Executing omo-cli query ../test_omni-morph/yt_2025_01.parquet 'Output average and maximum fare amount as well as tip amount grouped by …
+
+Command Output:
+────────────────────────────────────────────────────────────────────────────────
 ❌ SQL validation failed:
 Parser Error: syntax error at or near "Output"
 
-omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--💡 Suggested fix:
+💡 Suggested fix:
+The error occurs because the text you wrote is a natural language description, not a valid SQL statement. You need to write a proper SQL query instead.
 
-The error occurs because "Output" is not valid SQL syntax; you should use a `SELECT` statement instead. Here's the corrected query:
----
-SELECT payment_type, SUM(fare_amount) AS total_fare_amount, SUM(tip_amount) AS total_tip_amount
-FROM yt_sample
-GROUP BY payment_type;
----
+Here is a corrected SQL query that outputs the average and maximum fare amount and tip amount grouped by payment method, sorted by decreasing average fare amount:
+
+SELECT
+  payment_type,
+  AVG(fare_amount) AS avg_fare_amount,
+  MAX(fare_amount) AS max_fare_amount,
+  AVG(tip_amount) AS avg_tip_amount,
+  MAX(tip_amount) AS max_tip_amount
+FROM yt_2025_01
+GROUP BY payment_type
+ORDER BY avg_fare_amount DESC;
+
+Fix: Replace the natural language description with a valid SQL `SELECT` statement.
+────────────────────────────────────────────────────────────────────────────────
 AI suggested a SQL query fix.
 ? Would you like to run the suggested SQL query? Yes
-─ Executing omo-cli query ../test_omni-morph/yt_sample.parquet 'SELECT payment_type, SUM(fare_amount) AS total_fare_amount, SUM(tip_amount) AS total_tip_amount
-FROM yt_sample
-GROUP BY payment_type;'
-omo-cli ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   0% -:--:--|   payment_type |   total_fare_amount |   total_tip_amount |
-|---------------:|--------------------:|-------------------:|
-|              0 |             2741.97 |              61.77 |
-|              1 |            12074.8  |            2654.96 |
-|              2 |             1798.9  |               0    |
-|              3 |              103.3  |               0    |
-|              4 |              -75.1  |               0    |
-✓ Done
+Will run: omo-cli query ../test_omni-morph/yt_2025_01.parquet 'SELECT
+  payment_type,
+  AVG(fare_amount) AS avg_fare_amount,
+  MAX(fare_amount) AS max_fare_amount,
+  AVG(tip_amount) AS avg_tip_amount,
+  MAX(tip_amount) AS max_tip_amount
+FROM yt_2025_01
+GROUP BY payment_type
+ORDER BY avg_fare_amount DESC'
+─ Executing omo-cli query ../test_omni-morph/yt_2025_01.parquet 'SELECT payment_type, AVG(fare_amount) AS avg_fare_amount, MAX(fare_amount) AS max_fare_amount, …
+Command Output:
+────────────────────────────────────────────────────────────────────────────────
+
+|   payment_type |   avg_fare_amount |   max_fare_amount |   avg_tip_amount |   max_tip_amount |
+|---------------:|------------------:|------------------:|-----------------:|-----------------:|
+|              1 |          18.0085  |            936.8  |       4.10607    |           400    |
+|              2 |          16.6031  |           2450.9  |       0.00271363 |            20.42 |
+|              0 |          14.5875  |            503.59 |       0.452353   |            40    |
+|              4 |          11.434   |         863372    |       0.0439846  |           123.34 |
+|              3 |           4.49818 |            900    |       0.0168658  |            20    |
+|              5 |           0       |              0    |       0          |             0    |
 ```
 
 This feature requires an OpenAI API key set in the `OPENAI_API_KEY` environment variable.

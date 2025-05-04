@@ -124,7 +124,7 @@ def validate_sql(
 # AI-powered SQL query fix suggestion
 # ---------------------------------------------------------------------------
 
-def ai_suggest(sql: str, error_msg: str, schema_txt: str) -> str:
+def ai_suggest(sql: str, error_msg: str, schema_txt: str, source: Union[str, Path] = None) -> str:
     """Generate an improved SQL query suggestion using AI.
     
     This function uses OpenAI to analyze SQL errors and suggest corrections.
@@ -135,6 +135,7 @@ def ai_suggest(sql: str, error_msg: str, schema_txt: str) -> str:
         sql: The original SQL query that caused an error.
         error_msg: The error message returned by DuckDB.
         schema_txt: Text representation of the schema for the data source.
+        source: Optional source file path to derive the table name.
     
     Returns:
         A string containing either a corrected SQL query or a short explanation
@@ -150,15 +151,23 @@ def ai_suggest(sql: str, error_msg: str, schema_txt: str) -> str:
     # Initialize the OpenAI client
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    # Add table name information if source is provided
+    table_name_hint = ""
+    if source:
+        p = pathlib.Path(source)
+        table_name = p.stem
+        table_name_hint = f"\n\nThe data is stored in a table named `{table_name}`."\
+                          f" You can refer to this table directly in your SQL query."
+
     prompt = f"""I tried to run the SQL below but DuckDB returned an error.
     SQL:
-    ````sql
+    ```sql
     {sql}
-    ````
+    ```
     Error: {error_msg}
 
     The schema of the source file(s) is:
-    {schema_txt}
+    {schema_txt}{table_name_hint}
 
     Suggest a corrected query, or explain the fix in one sentence.
     """

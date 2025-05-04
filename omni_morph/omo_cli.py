@@ -325,7 +325,7 @@ def query(
             typer.echo(f"\n❌ SQL validation failed:\n{err}\n")
             
             try:
-                suggestion = ai_suggest(sql, err, schema_txt)
+                suggestion = ai_suggest(sql, err, schema_txt, source=file_path)
                 typer.echo("💡 Suggested fix:\n")
                 typer.echo(suggestion)
             except Exception as ex:
