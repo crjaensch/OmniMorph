@@ -86,36 +86,18 @@ Options:
 
 Commands:
   head           Print the first N records from a file.
-  merge          Merge multiple files of the same or different formats...
-  meta           Print the metadata of a file 
-                 (JSON response with keys: file_size, created, modified, encoding, num_records, format).
-  query          Run SQL queries against data files using DuckDB.
-  random-sample  Randomly sample records from a file.
+  tail           Print the last N records from a file.
+  meta           Print the metadata of a file (file_size, created, modified, encoding, num_records, format).
   schema         Print the schema for a file.
   stats          Print statistics about a file.
-  tail           Print the last N records from a file.
+  query          Run SQL queries against data files using DuckDB.
+  random-sample  Randomly sample records from a file.
   to-avro        Convert one file to Avro format.
   to-csv         Convert one file to CSV format.
   to-json        Convert one file to JSON format.
   to-parquet     Convert one file to Parquet format.
+  merge          Merge multiple files of the same or different formats...
 ```
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `head` | Print the first N records from a file |
-| `tail` | Print the last N records from a file |
-| `meta` | Print file metadata (size, creation date, etc.) |
-| `schema` | Print the schema for a file |
-| `stats` | Print statistics about a file |
-| `query` | Run SQL queries against data files using DuckDB |
-| `random-sample` | Randomly sample records from a file |
-| `to-avro` | Convert a file to Avro format |
-| `to-csv` | Convert a file to CSV format |
-| `to-json` | Convert a file to JSON format |
-| `to-parquet` | Convert a file to Parquet format |
-| `merge` | Merge multiple files into a single output file |
 
 ### Command Examples
 
