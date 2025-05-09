@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 
 import duckdb, pathlib, pyarrow.dataset as ds
-from typing import Optional, Literal, Union
+from typing import Optional, Literal, Union, Dict, Any
 from pathlib import Path
 from omni_morph.data.formats import Format
 
@@ -20,6 +20,7 @@ def query(
     *,
     fmt: Optional[Format] = None,
     return_type: Literal["arrow", "pandas", "stdout"] = "stdout",
+    azure_credentials: Optional[Dict[str, Any]] = None,
 ) -> Optional[object]:
     """Run SQL queries against a data file (source) in various formats.
     
@@ -55,6 +56,12 @@ def query(
     # Install and load Avro extension if needed
     if resolved_fmt == Format.AVRO:
         _ensure_avro_extension(con)
+        
+    # Load Azure extension if needed for Azure paths
+    if path_str.startswith(('abfss://', 'abfs://')):
+        azure_loaded = _ensure_azure_extension(con)
+        if azure_loaded:
+            _configure_azure_credentials(con, azure_credentials)
 
     _register_source(con, resolved_fmt, path_str)
 
@@ -84,6 +91,7 @@ def validate_sql(
     source: Union[str, Path],
     *,
     fmt: Optional[Format] = None,
+    azure_credentials: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Validate SQL syntax against a data source without executing the query.
     
@@ -112,6 +120,12 @@ def validate_sql(
     # Install and load Avro extension if needed
     if resolved_fmt == Format.AVRO:
         _ensure_avro_extension(con)
+        
+    # Load Azure extension if needed for Azure paths
+    if path_str.startswith(('abfss://', 'abfs://')):
+        azure_loaded = _ensure_azure_extension(con)
+        if azure_loaded:
+            _configure_azure_credentials(con, azure_credentials)
 
     _register_source(con, resolved_fmt, path_str, lazy=True)    # lazy views
     try:
@@ -215,6 +229,55 @@ def _ensure_avro_extension(con):
         return False
 
 
+def _configure_azure_credentials(con, azure_credentials):
+    """Configure Azure credentials for DuckDB connection.
+    
+    Args:
+        con: DuckDB connection object.
+        azure_credentials: Dictionary containing Azure credentials.
+        
+    Returns:
+        None
+    """
+    if not azure_credentials:
+        return
+        
+    # Configure Azure credentials
+    if azure_credentials.get('azure_connection_string'):
+        con.execute(f"SET azure_storage_connection_string='{azure_credentials['azure_connection_string']}'")
+    elif azure_credentials.get('azure_account_name') and azure_credentials.get('azure_account_key'):
+        con.execute(f"SET azure_account_name='{azure_credentials['azure_account_name']}'")
+        con.execute(f"SET azure_account_key='{azure_credentials['azure_account_key']}'")
+    elif all(azure_credentials.get(k) for k in ['azure_tenant_id', 'azure_client_id', 'azure_client_secret']):
+        con.execute(f"SET azure_tenant_id='{azure_credentials['azure_tenant_id']}'")
+        con.execute(f"SET azure_client_id='{azure_credentials['azure_client_id']}'")
+        con.execute(f"SET azure_client_secret='{azure_credentials['azure_client_secret']}'")
+
+def _ensure_azure_extension(con):
+    """Ensure the Azure extension is installed and loaded in DuckDB.
+    
+    Args:
+        con: DuckDB connection object.
+        
+    Returns:
+        bool: True if the extension was successfully installed and loaded, False otherwise.
+    """
+    try:
+        # Check if the extension is already installed and loaded
+        con.execute("SELECT loaded FROM duckdb_extensions() WHERE extension_name='azure'")
+        result = con.fetchone()
+        
+        if result and result[0]:
+            return True  # Already loaded
+            
+        # Install and load the extension
+        con.execute("INSTALL azure")
+        con.execute("LOAD azure")
+        return True
+    except duckdb.Error as e:
+        print(f"Warning: Could not load Azure extension: {e}")
+        return False
+
 def _register_source(con, fmt, source, *, lazy=False):
     """Create DuckDB views for the specified data file.
     
@@ -226,30 +289,36 @@ def _register_source(con, fmt, source, *, lazy=False):
         fmt: Format of the source file (Format enum).
         source: Path to the source file as a string.
         lazy: If True, only reads headers/metadata for schema inference without
-              loading the full data. Useful for validation purposes.
+               loading the full data. Useful for validation purposes.
     
     Raises:
         QueryError: If the source file format is unsupported.
     """
-    p = pathlib.Path(source)
-    name = p.stem
+    # For Azure paths, we need to use the full path as the source
+    # but still extract just the filename for the view name
+    if source.startswith(('abfss://', 'abfs://')):
+        # Extract the filename from the Azure path
+        name = source.split('/')[-1].split('.')[0]
+    else:
+        p = pathlib.Path(source)
+        name = p.stem
 
     if fmt == Format.PARQUET:
         # read_parquet doesn't scan the whole file until execution time
-        con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{p}')")
+        con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_parquet('{source}')")
 
     elif fmt == Format.CSV:
         # sample=1 forces only header inference when lazy=True
         sample_clause = ", sample_size=1" if lazy else ""
         con.execute(
             f"CREATE VIEW {name} AS "
-            f"SELECT * FROM read_csv_auto('{p}'{sample_clause})"
+            f"SELECT * FROM read_csv_auto('{source}'{sample_clause})"
         )
 
     elif fmt == Format.JSON:
         con.execute(
             f"CREATE VIEW {name} AS "
-            f"SELECT * FROM read_json_auto('{p}', maximum_object_size=131072)"
+            f"SELECT * FROM read_json_auto('{source}', maximum_object_size=131072)"
         )
 
     elif fmt == Format.AVRO:
@@ -259,7 +328,7 @@ def _register_source(con, fmt, source, *, lazy=False):
         if avro_extension_loaded:
             # Use DuckDB's native Avro support
             try:
-                con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_avro('{p}')")
+                con.execute(f"CREATE VIEW {name} AS SELECT * FROM read_avro('{source}')")
                 return
             except duckdb.Error as exc:
                 # If read_avro fails, fall back to fastavro
@@ -273,11 +342,21 @@ def _register_source(con, fmt, source, *, lazy=False):
             
             # Read the Avro file using fastavro
             records = []
-            with open(str(p), 'rb') as f:
-                reader = fastavro.reader(f)
-                if not lazy:
-                    records = list(reader)
-                schema = reader.schema
+            
+            # Handle both local and Azure paths
+            if source.startswith(('abfss://', 'abfs://')):
+                from omni_morph.data.filesystems import FileSystemHandler
+                with FileSystemHandler.open_file(source, 'rb') as f:
+                    reader = fastavro.reader(f)
+                    if not lazy:
+                        records = list(reader)
+                    schema = reader.schema
+            else:
+                with open(str(source), 'rb') as f:
+                    reader = fastavro.reader(f)
+                    if not lazy:
+                        records = list(reader)
+                    schema = reader.schema
             
             # If lazy loading, just create an empty DataFrame with the schema
             if lazy and not records:

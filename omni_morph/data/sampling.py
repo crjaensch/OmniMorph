@@ -1,7 +1,8 @@
 from __future__ import annotations
 import os
 import random
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Union, BinaryIO
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -12,6 +13,7 @@ except ImportError:  # fastavro is optional until Avro is actually used
     avro_reader = None
 
 from .exceptions import ExtractError
+from .filesystems import FileSystemHandler
 
 # ---------------------------------------------------------------------------
 #  PARQUET SAMPLING (efficient row-group aware)
@@ -25,9 +27,16 @@ def parquet_sample(
     replace: bool,
     limit: int,
 ) -> pa.Table:
-    pfile = pq.ParquetFile(path)
+    # Use FileSystemHandler to handle both local and Azure paths
+    fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+    
+    # Create ParquetFile using fsspec filesystem
+    pfile = pq.ParquetFile(fs_path, filesystem=fs)
     total_rows = pfile.metadata.num_rows
-    file_size  = os.path.getsize(path)
+    
+    # Get file size using FileSystemHandler
+    file_info = FileSystemHandler.get_file_info(path)
+    file_size = file_info.get('size', 0)
 
     # ---------- choose indices ------------------------------------------------
     if fraction is not None:
@@ -147,14 +156,16 @@ def sample_in_memory(
 def iter_avro(path: str):
     if avro_reader is None:
         raise ImportError("fastavro is required (`pip install fastavro`).")
-    with open(path, "rb") as fo:
+    # Use FileSystemHandler to handle both local and Azure paths
+    with FileSystemHandler.open_file(path, "rb") as fo:
         for rec in avro_reader(fo):
             yield rec
 
 
 def iter_jsonl(path: str):
-    import json, mmap
-    with open(path, "r", encoding="utf8") as fh:
+    import json
+    # Use FileSystemHandler to handle both local and Azure paths
+    with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
         for line in fh:
             if line.strip():
                 yield json.loads(line)
@@ -162,7 +173,12 @@ def iter_jsonl(path: str):
 
 def iter_csv(path: str):
     import csv
-    with open(path, "r", newline="", encoding="utf8") as fh:
+    import io
+    # Use FileSystemHandler to handle both local and Azure paths
+    with FileSystemHandler.open_file(path, "r", newline="", encoding="utf8") as fh:
+        # Ensure we have a proper file-like object for csv.DictReader
+        if not hasattr(fh, 'read') or not callable(fh.read):
+            fh = io.StringIO(fh.read())
         rdr = csv.DictReader(fh)
         for row in rdr:
             yield row

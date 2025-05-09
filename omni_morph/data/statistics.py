@@ -1,9 +1,10 @@
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union, Dict, List, Tuple
+from typing import Optional, Union, Dict, List, Tuple, BinaryIO, TextIO
 import math
 import os
+import io
 
 import pandas as pd
 import pyarrow as pa
@@ -19,6 +20,7 @@ except ImportError:
 
 from omni_morph.data.exceptions import ExtractError
 from omni_morph.data.formats import Format
+from omni_morph.data.filesystems import FileSystemHandler
 
 __all__ = [
     "get_stats"
@@ -139,7 +141,10 @@ def get_stats(
     path_str = str(path)
 
     resolved_fmt = fmt or Format.from_path(path_str)
-    size = os.path.getsize(path_str)
+    
+    # Get file size using FileSystemHandler
+    file_info = FileSystemHandler.get_file_info(path_str)
+    size = file_info.get('size', 0)
 
     if resolved_fmt == Format.PARQUET:
         return _stats_parquet(path_str, columns, size, sample_size, small_file_threshold)
@@ -161,7 +166,9 @@ def _stats_parquet(
     sample_size: int,
     limit: int
 ) -> Dict[str, Dict]:
-    pf = pq.ParquetFile(path)
+    # Use FileSystemHandler to handle both local and Azure paths
+    fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+    pf = pq.ParquetFile(fs_path, filesystem=fs)
     if cols is None:
         cols = [f.name for f in pf.schema_arrow]
     small = size < limit
@@ -190,7 +197,8 @@ def _stats_avro(
         raise ImportError("fastavro missing (`pip install fastavro`).")
 
     num_aggs, cat_aggs = {}, {}
-    with open(path, "rb") as fo:
+    # Use FileSystemHandler to handle both local and Azure paths
+    with FileSystemHandler.open_file(path, "rb") as fo:
         for rec in avro_reader(fo):
             _update_aggs_from_dict(rec, num_aggs, cat_aggs, cols, sample_size)
     return _finish_aggs(num_aggs, cat_aggs)
@@ -204,14 +212,31 @@ def _stats_csv(
     limit: int
 ) -> Dict[str, Dict]:
     try:
+        # Use FileSystemHandler to handle both local and Azure paths
+        fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+        
         # If no columns specified, read the header row first to get all column names
         if cols is None:
-            # Read just the header to get column names
-            df_header = pd.read_csv(path, nrows=0)
-            cols = df_header.columns.tolist()
+            # Open the file using FileSystemHandler
+            with FileSystemHandler.open_file(path, 'r', encoding='utf8') as f:
+                # Create a pandas-compatible file-like object if needed
+                if not hasattr(f, 'read') or not callable(f.read):
+                    f = io.StringIO(f.read())
+                # Read just the header to get column names
+                df_header = pd.read_csv(f, nrows=0)
+                cols = df_header.columns.tolist()
         
-        chunks = pd.read_csv(path, chunksize=1_000_000)
-        return _stats_from_chunks(chunks, cols, sample_size)
+        # For chunked reading, we need to create a generator that uses FileSystemHandler
+        def read_chunks():
+            with FileSystemHandler.open_file(path, 'r', encoding='utf8') as f:
+                # Create a pandas-compatible file-like object if needed
+                if not hasattr(f, 'read') or not callable(f.read):
+                    f = io.StringIO(f.read())
+                # Use pandas to read in chunks
+                for chunk in pd.read_csv(f, chunksize=1_000_000):
+                    yield chunk
+                    
+        return _stats_from_chunks(read_chunks(), cols, sample_size)
     except FileNotFoundError:
         raise ExtractError(f"CSV file not found: {path}")
     except PermissionError:
@@ -234,7 +259,7 @@ def _stats_jsonl(
     try:
         # If no columns specified, read the first record to get all keys
         if cols is None:
-            with open(path, "r", encoding="utf8") as fh:
+            with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
                 for line in fh:
                     if line.strip():
                         try:
@@ -247,7 +272,7 @@ def _stats_jsonl(
                             pass
         
         def chunks():
-            with open(path, "r", encoding="utf8") as fh:
+            with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
                 batch = []
                 line_num = 0
                 for line in fh:

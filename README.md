@@ -30,6 +30,8 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
   - [File Merging](#file-merging)
   - [SQL Queries (API)](#sql-queries-api)
 - [Supported File Formats](#supported-file-formats)
+- [Alpha Features](#alpha-features)
+  - [Azure ADLS Gen2 Support](#azure-adls-gen2-support)
 
 ## Installation
 
@@ -535,3 +537,75 @@ if error:
 - **JSON** (.json)
 - **Avro** (.avro)
 - **Parquet** (.parquet)
+
+## Alpha Features
+
+These features are in early development and may not be fully stable. Use with caution in production environments.
+
+### Azure ADLS Gen2 Support
+
+OmniMorph now includes alpha-level support for Azure Data Lake Storage Gen2. This allows you to read and write files directly from/to Azure ADLS Gen2 storage.
+
+#### Authentication Methods
+
+OmniMorph supports multiple authentication methods for Azure ADLS Gen2:
+
+1. **Connection String**
+2. **Account Key**
+3. **Service Principal**
+
+#### CLI Usage
+
+```bash
+# Using connection string
+poetry run omo-cli --azure-connection-string "DefaultEndpointsProtocol=https;..." head abfss://container@account.dfs.core.windows.net/path/to/file.csv
+
+# Using account key
+poetry run omo-cli --azure-account-name "myaccount" --azure-account-key "mykey" to-parquet abfss://container@account.dfs.core.windows.net/path/to/file.csv output.parquet
+
+# Using service principal
+poetry run omo-cli --azure-tenant-id "tenant-id" --azure-client-id "client-id" --azure-client-secret "client-secret" query abfss://container@account.dfs.core.windows.net/path/to/file.csv "SELECT * FROM file LIMIT 10"
+```
+
+#### Environment Variables
+
+You can also set Azure credentials using environment variables:
+
+```bash
+# Set Azure credentials as environment variables
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;..."
+# or
+export AZURE_STORAGE_ACCOUNT_NAME="myaccount"
+export AZURE_STORAGE_ACCOUNT_KEY="mykey"
+# or
+export AZURE_TENANT_ID="tenant-id"
+export AZURE_CLIENT_ID="client-id"
+export AZURE_CLIENT_SECRET="client-secret"
+
+# Then run commands without specifying credentials
+poetry run omo-cli head abfss://container@account.dfs.core.windows.net/path/to/file.csv
+```
+
+#### Python API Usage
+
+```python
+from omni_morph.data.converter import read, write, convert
+from omni_morph.data.filesystems import FileSystemHandler
+
+# Set Azure credentials
+FileSystemHandler.set_azure_credentials({
+    "azure_connection_string": "DefaultEndpointsProtocol=https;..."
+})
+
+# Read from Azure ADLS Gen2
+table = read("abfss://container@account.dfs.core.windows.net/path/to/file.csv")
+
+# Write to Azure ADLS Gen2
+write(table, "abfss://container@account.dfs.core.windows.net/path/to/output.parquet")
+
+# Convert between formats
+convert("abfss://container@account.dfs.core.windows.net/path/to/file.csv", 
+       "abfss://container@account.dfs.core.windows.net/path/to/output.parquet")
+```
+
+> **Note:** This feature is currently in alpha. Some advanced operations like random sampling on very large files might not be optimized for cloud storage yet.

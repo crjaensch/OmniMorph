@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import pandas as pd
 
 from omni_morph.data.formats import Format
+from omni_morph.data.filesystems import FileSystemHandler
 from .exceptions import ExtractError
 
 try:
@@ -144,7 +145,9 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
         ImportError: If format-specific dependencies are missing
     """
     if fmt == "parquet":
-        writer = pq.ParquetWriter(path, schema)
+        # Use FileSystemHandler to get filesystem and path for Azure support
+        fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+        writer = pq.ParquetWriter(fs_path, schema, filesystem=fs)
         write_func = lambda tbl: writer.write_table(tbl)
         write_func.close = lambda: writer.close()
         return write_func
@@ -153,7 +156,8 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
             raise ImportError("fastavro needed for Avro.")
         from fastavro import writer as avro_writer, parse_schema
         avro_schema = json.loads(schema.to_json())
-        fo = open(path, "wb")
+        # Use FileSystemHandler to open file for Azure support
+        fo = FileSystemHandler.open_file(path, "wb")
         def _write(tbl):
             records = tbl.to_pylist()
             avro_writer(fo, parse_schema(avro_schema), records)
@@ -161,7 +165,8 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
         return _write
     if fmt == "csv":
         header_written = False
-        fo = open(path, "w", newline="", encoding="utf8")
+        # Use FileSystemHandler to open file for Azure support
+        fo = FileSystemHandler.open_file(path, "w", newline="", encoding="utf8")
         def _write(tbl):
             nonlocal header_written
             df = tbl.to_pandas()
@@ -170,7 +175,8 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
         _write.close = lambda : fo.close()
         return _write
     if fmt == "jsonl":
-        fo = open(path, "w", encoding="utf8")
+        # Use FileSystemHandler to open file for Azure support
+        fo = FileSystemHandler.open_file(path, "w", encoding="utf8")
         def _write(tbl):
             for rec in tbl.to_pylist():
                 fo.write(json.dumps(rec, default=str) + "\n")
@@ -198,13 +204,16 @@ def _batch_reader(path: str, chunksize: int):
     resolved_fmt = Format.from_path(path)
     fmt = "jsonl" if resolved_fmt is Format.JSON else resolved_fmt.name.lower()
     if fmt == "parquet":
-        pf = pq.ParquetFile(path)
+        # Use FileSystemHandler to get filesystem and path for Azure support
+        fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+        pf = pq.ParquetFile(fs_path, filesystem=fs)
         for rg in range(pf.num_row_groups):
             yield pf.read_row_group(rg)
     elif fmt == "avro":
         if avro_reader is None:
             raise ImportError("fastavro required.")
-        with open(path, "rb") as fo:
+        # Use FileSystemHandler to open file for Azure support
+        with FileSystemHandler.open_file(path, "rb") as fo:
             batch = []
             for rec in avro_reader(fo):
                 batch.append(rec)
@@ -214,12 +223,20 @@ def _batch_reader(path: str, chunksize: int):
             if batch:
                 yield pa.Table.from_pylist(batch)
     elif fmt == "csv":
-        for df in pd.read_csv(path, chunksize=chunksize):
-            yield pa.Table.from_pandas(df, preserve_index=False)
+        # Use FileSystemHandler to open file for Azure support
+        with FileSystemHandler.open_file(path, 'r', encoding='utf-8') as f:
+            # Create a pandas-compatible file-like object if needed
+            if not hasattr(f, 'read') or not callable(f.read):
+                import io
+                f = io.StringIO(f.read())
+            # Read CSV in chunks
+            for df in pd.read_csv(f, chunksize=chunksize):
+                yield pa.Table.from_pandas(df, preserve_index=False)
     elif fmt == "jsonl":
         import json
         batch = []
-        with open(path, "r", encoding="utf8") as fh:
+        # Use FileSystemHandler to open file for Azure support
+        with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
             for line in fh:
                 if not line.strip():
                     continue

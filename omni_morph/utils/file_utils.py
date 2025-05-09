@@ -8,10 +8,11 @@ Supports Parquet, Avro, JSON, and CSV formats.
 import json
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 import os
 import datetime as _dt
 from omni_morph.data.formats import Format
+from omni_morph.data.filesystems import FileSystemHandler
 from omni_morph.utils._csv_schema import infer_csv_schema
 from omni_morph.data.exceptions import ExtractError
 
@@ -23,9 +24,11 @@ from genson import SchemaBuilder
 def _infer_json_schema(filepath: str):
     """
     Infer JSON schema: handles both JSON and JSONL (first record) using GenSON.
+    
+    Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     builder = SchemaBuilder()
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with FileSystemHandler.open_file(filepath, 'r', encoding='utf-8') as f:
         try:
             data = json.load(f)
         except JSONDecodeError:
@@ -67,7 +70,7 @@ def get_schema(filepath: str, fmt: Format = None):
         # Convert pyarrow.Schema to JSON-serializable dict
         return {"fields": [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in schema]}
     if resolved_fmt == Format.AVRO:
-        with open(filepath, 'rb') as fo:
+        with FileSystemHandler.open_file(filepath, 'rb') as fo:
             reader = fastavro.reader(fo)
             return reader.schema
     if resolved_fmt == Format.JSON:
@@ -98,7 +101,7 @@ def get_metadata(
     Return metadata for the given file.
 
     Args:
-        filepath (str): Path to the data file.
+        filepath (str): Path to the data file (local path or cloud URL).
         fmt (Format, optional): Override format inference. Supported: 'parquet', 'avro', 'json', 'csv'. Defaults to None.
         sample_bytes (int, optional): Number of bytes to sample for encoding detection. Defaults to 32_768.
         small_file_threshold (int, optional): Threshold in bytes for treating a file as small. Defaults to 100 * 1024 * 1024.
@@ -111,15 +114,31 @@ def get_metadata(
         ExtractError: If filepath does not exist or is not a regular file.
         ValueError: If the file format is unsupported.
     """
-    p = Path(filepath)
-    if not p.exists() or not p.is_file():
+    # Check if file exists
+    if not FileSystemHandler.exists(filepath):
         raise ExtractError(f"{filepath!r} does not exist or is not a regular file.")
 
     # ---------- filesystem --------------------------------------------------
-    stat = p.stat()
-    created  = _dt.datetime.fromtimestamp(stat.st_ctime, _dt.timezone.utc)
-    modified = _dt.datetime.fromtimestamp(stat.st_mtime, _dt.timezone.utc)
-    file_size = stat.st_size
+    # Get file info from the appropriate filesystem
+    file_info = FileSystemHandler.get_file_info(filepath)
+    file_size = file_info.get('size', 0)
+    
+    # Try to get timestamps (may not be available for all filesystems)
+    created = file_info.get('created', None)
+    modified = file_info.get('mtime', None)
+    
+    # Convert to datetime objects if available
+    if created is not None:
+        created = _dt.datetime.fromtimestamp(created, _dt.timezone.utc)
+    else:
+        # Default to current time if not available
+        created = _dt.datetime.now(_dt.timezone.utc)
+        
+    if modified is not None:
+        modified = _dt.datetime.fromtimestamp(modified, _dt.timezone.utc)
+    else:
+        # Default to current time if not available
+        modified = _dt.datetime.now(_dt.timezone.utc)
 
     # ---------- format ------------------------------------------------------
     resolved_fmt = fmt or Format.from_path(filepath)
@@ -162,52 +181,102 @@ def get_metadata(
 # ---------------------------------------------------------------------------
 
 def _guess_encoding(filepath: str, sample_bytes: int) -> str:
-    """Best-effort encoding sniff (defaults to UTF-8)."""
+    """
+    Best-effort encoding sniff (defaults to UTF-8).
+    
+    Supports both local paths and cloud URLs (Azure ADLS Gen2).
+    """
     try:
         import chardet
     except ImportError:
         return "utf-8"
 
-    with open(filepath, "rb") as fh:
+    with FileSystemHandler.open_file(filepath, "rb") as fh:
         raw = fh.read(sample_bytes)
     res = chardet.detect(raw)
     return res["encoding"] or "utf-8"
 
 
 def _count_avro(path: str, limit: int) -> int:
-    """Count records in an Avro data file without loading it fully into RAM."""
-    size = os.path.getsize(path)
-    if size < limit:                    # small file → load once
-        with open(path, "rb") as fo:
+    """
+    Count records in an Avro data file without loading it fully into RAM.
+    
+    Supports both local paths and cloud URLs (Azure ADLS Gen2).
+    """
+    # Get file info to check size
+    file_info = FileSystemHandler.get_file_info(path)
+    size = file_info.get('size', 0)
+    
+    if size < limit:  # small file → load once
+        with FileSystemHandler.open_file(path, "rb") as fo:
             return sum(1 for _ in fastavro.reader(fo))
 
     # streaming count, block by block
     cnt = 0
-    with open(path, "rb") as fo:
+    with FileSystemHandler.open_file(path, "rb") as fo:
         for rec in fastavro.reader(fo):
             cnt += 1
     return cnt
 
 
 def _count_lines(path: str, encoding: str, limit: int) -> int:
-    """Fast line count for JSONL."""
-    size = os.path.getsize(path)
+    """
+    Fast line count for JSONL.
+    
+    Supports both local paths and cloud URLs (Azure ADLS Gen2).
+    """
+    # Get file info to check size
+    file_info = FileSystemHandler.get_file_info(path)
+    size = file_info.get('size', 0)
+    
     count = 0
-    with open(path, "r", encoding=encoding) as fh:
+    with FileSystemHandler.open_file(path, "r", encoding=encoding) as fh:
         if size < limit:
             for line in fh:
                 if line.strip():
                     count += 1
         else:
-            while True:
-                chunk = fh.read(1024 * 1024)
-                if not chunk:
+            # For large files, sample first N lines
+            # to estimate average line length
+            sample_size = 1000
+            sample_lines = []
+            for i, line in enumerate(fh):
+                if i >= sample_size:
                     break
-                count += chunk.count("\n")
+                if line.strip():
+                    sample_lines.append(line)
+            
+            if not sample_lines:
+                return 0  # Empty file or no valid lines
+                
+            # Calculate average line length from sample
+            avg_line_length = sum(len(line) for line in sample_lines) / len(sample_lines)
+            
+            # Estimate total lines based on file size and average line length
+            # This is an approximation and might not be 100% accurate
+            estimated_lines = int(size / avg_line_length)
+            
+            # Add count from sample
+            count = len(sample_lines)
+            
+            # If we've read less than 10% of the file, extrapolate
+            if sample_size * avg_line_length < size * 0.1:
+                return estimated_lines
+            
+            # Otherwise continue counting the rest
+            for line in fh:
+                if line.strip():
+                    count += 1
+    
     return count
 
 
 def _count_csv_rows(path: str, encoding: str, limit: int) -> int:
-    """Counts data rows (excludes header)."""
+    """
+    Counts data rows (excludes header).
+    
+    Supports both local paths and cloud URLs (Azure ADLS Gen2).
+    """
+    # Just reuse line counter but subtract 1 for header
     total = _count_lines(path, encoding, limit)
-    return max(0, total - 1)            # subtract header
+    return max(0, total - 1)  # Ensure we don't return negative count

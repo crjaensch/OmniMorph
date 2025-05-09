@@ -4,15 +4,19 @@ Internal I/O helpers - kept separate so the public package namespace stays tidy.
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import pyarrow as pa
 import pyarrow.csv as pacsv
 import pyarrow.json as pajson
 import pyarrow.parquet as papq
+import fsspec
 
 import pandas as pd
+
+from .filesystems import FileSystemHandler
 
 # Try to import fastavro for Avro support
 try:
@@ -61,8 +65,9 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
     # Cache file stats to avoid multiple syscalls
     file_empty = False
     try:
-        file_stats = path.stat()
-        file_empty = file_stats.st_size == 0
+        # Use FileSystemHandler to get file info (works with both local and Azure paths)
+        file_info = FileSystemHandler.get_file_info(str(path))
+        file_empty = file_info.get('size', 0) == 0
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {path}")
     
@@ -194,7 +199,8 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
     avro_pa_schema = schema
 
     try:
-        with open(path, 'rb') as fo:
+        # Use FileSystemHandler to open file (works with both local and Azure paths)
+        with FileSystemHandler.open_file(str(path), 'rb') as fo:
             # Get schema information first
             reader = fastavro.reader(fo)
             avro_schema_dict = reader.writer_schema
@@ -266,18 +272,21 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
 # --------------------------------------------------------------------------- #
 # Writers
 # --------------------------------------------------------------------------- #
-def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
+def _write_impl(table: pa.Table, path: Union[str, Path], fmt: Format, **kwargs) -> None:
     """Write a PyArrow Table to a file.
     
     Args:
         table: The PyArrow Table to write
-        path: Path to write the file to
+        path: Path to write the file to (local path or cloud URL)
         fmt: Format of the file
         **kwargs: Additional format-specific options
             - For Parquet: compression, use_dictionary, write_statistics, use_threads
             - For CSV: include_header, batch_size, delimiter, quoting_style
             - For JSON: indent
     """
+    # Convert Path to string if needed
+    path_str = str(path) if isinstance(path, Path) else path
+    
     # Extract common parameters that might not be supported by all formats
     use_threads = kwargs.pop('use_threads', True)  # Default to True but don't pass to all formats
     compression = kwargs.pop('compression', None)
@@ -343,7 +352,7 @@ def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
                 del records
         
         # Write Avro file using fastavro with the optimized generator
-        with open(path, 'wb') as fo:
+        with FileSystemHandler.open_file(path_str, 'wb') as fo:
             fastavro.writer(fo, parsed_schema, optimized_record_generator())
     
     elif fmt is Format.PARQUET:
@@ -363,18 +372,23 @@ def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
         # Add any remaining kwargs
         parquet_kwargs.update(kwargs)
         
-        papq.write_table(table, path, **parquet_kwargs)
+        # Get filesystem and path for cloud storage support
+        fs, fs_path = FileSystemHandler.get_fs_and_path(path_str)
+        
+        # Write the table using the filesystem
+        papq.write_table(table, fs_path, filesystem=fs, **parquet_kwargs)
     
     elif fmt is Format.JSON:
         # If table is empty, explicitly create an empty file
         if table.num_rows == 0:
-            path.touch()
+            with FileSystemHandler.open_file(path_str, 'wb') as f:
+                # Create empty file
+                pass
         elif table.num_rows > 0:
             # PyArrow doesn't have a direct write_json function for JSON Lines
             # Convert to list of records and write as JSON lines
             records = table.to_pylist()
-            with open(path, 'w') as fo:
-                import json
+            with FileSystemHandler.open_file(path_str, 'w') as fo:
                 for record in records:
                     # Use default=str for types not directly serializable (like datetime)
                     fo.write(json.dumps(record, default=str) + '\n')
@@ -388,8 +402,10 @@ def _write_impl(table: pa.Table, path: Path, fmt: Format, **kwargs) -> None:
             delimiter=kwargs.pop("delimiter", ","),  # Handle delimiter parameter
             quoting_style=kwargs.pop("quoting_style", "needed")  # Handle quoting_style parameter
         )
-        # Pass remaining kwargs to write_csv
-        pacsv.write_csv(table, path, write_options=write_opts, **kwargs)
+        # Write the table using the filesystem
+        with FileSystemHandler.open_file(path_str, 'wb') as f:
+            # Pass remaining kwargs to write_csv
+            pacsv.write_csv(table, f, write_options=write_opts, **kwargs)
 
     else:
         raise AssertionError("unreachable")

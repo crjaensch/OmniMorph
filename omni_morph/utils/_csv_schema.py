@@ -2,10 +2,14 @@
 _csv_schema.py
 
 Utilities for inferring schemas from CSV files.
+Supports both local paths and cloud URLs (Azure ADLS Gen2).
 """
 
 import csv
+import io
 from typing import Dict, Any, List, Union
+
+from omni_morph.data.filesystems import FileSystemHandler
 
 def infer_csv_schema(filepath: str) -> Dict[str, Any]:
     """
@@ -17,7 +21,12 @@ def infer_csv_schema(filepath: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: A dictionary representing the inferred schema
     """
-    with open(filepath, 'r', encoding='utf-8') as f:
+    # Use FileSystemHandler to open file for Azure support
+    with FileSystemHandler.open_file(filepath, 'r', encoding='utf-8') as f:
+        # Create a file-like object if needed (for certain cloud storage implementations)
+        if not hasattr(f, 'read') or not callable(f.read):
+            f = io.StringIO(f.read())
+            
         # Read the first few rows to infer types
         csv_reader = csv.reader(f)
         headers = next(csv_reader)  # Get headers

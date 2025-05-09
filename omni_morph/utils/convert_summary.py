@@ -14,10 +14,13 @@ Usage as CLI:
 Usage as module:
     from omni_morph.utils.convert_summary import convert_summary
     markdown_str = convert_summary(path_to_summary_file)
-"""
+
+Supports both local paths and cloud URLs (Azure ADLS Gen2)."""
 from pathlib import Path
 import argparse
 import pandas as pd
+
+from omni_morph.data.filesystems import FileSystemHandler
 
 # --------------------------------------------------------------------------- #
 # 1.  Helpers                                                                  #
@@ -32,12 +35,15 @@ def _parse_summary_md(path: str) -> pd.DataFrame:
     """Read the markdown table produced by the DuckDB SUMMARIZE command.
     
     Args:
-        path: Path to the markdown file containing DuckDB's summary output
+        path: Path to the markdown file containing DuckDB's summary output (local path or cloud URL)
         
     Returns:
         DataFrame containing the parsed summary data
     """
-    lines = Path(path).read_text().splitlines()
+    # Use FileSystemHandler to read file content (works with both local and Azure paths)
+    with FileSystemHandler.open_file(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    lines = content.splitlines()
 
     # keep only rows that look like markdown‑table lines ("| .. |")
     rows = [ln for ln in lines if ln.strip().startswith("|")] 
