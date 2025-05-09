@@ -18,6 +18,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, BarColumn, TimeElapsedColumn
 from omni_morph.data.formats import Format
+from omni_morph.data.filesystems import FileSystemHandler
 
 console = Console()
 
@@ -544,7 +545,16 @@ def app():
     while True:
         try:
             # Show the remembered file in the main menu if it exists
-            if REMEMBERED_FILE_PATH and Path(REMEMBERED_FILE_PATH).is_file():
+            file_exists = False
+            try:
+                fs_handler = FileSystemHandler()
+                file_exists = fs_handler.exists(REMEMBERED_FILE_PATH)
+            except Exception:
+                # Fall back to local file check if there's an error
+                if REMEMBERED_FILE_PATH:
+                    file_exists = Path(REMEMBERED_FILE_PATH).is_file()
+                    
+            if REMEMBERED_FILE_PATH and file_exists:
                 console.print(f"[dim]Remembered file:[/] {REMEMBERED_FILE_PATH}")
             
             # Create choices list with remember/forget at the top
