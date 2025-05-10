@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "omni_morph"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transform, inspect, and merge data files with a single command-line Swiss Army knife for data engineers"
 authors = ["Christian R. Jaensch <@crjaensch>"]
 readme = "README.md"
