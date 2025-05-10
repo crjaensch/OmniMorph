@@ -35,13 +35,39 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
 
 ## Installation
 
+There are two main ways to install and use OmniMorph:
+
+### Option 1: Using Poetry (Development Mode)
+
 ```bash
-# Install using Poetry (recommended)
+# Install dependencies with Poetry
 poetry install
 
-# Or using pip
-pip install omni_morph
+# Run commands with the poetry run prefix
+poetry run omo-cli --help
+poetry run omo-wizard
 ```
+
+### Option 2: Build and Install as a Python Package
+
+```bash
+# Optional: Create and activate a virtual environment first
+python3 -m venv .omnimorph
+source .omnimorph/bin/activate  # On Windows: .omnimorph\Scripts\activate
+
+# Install dependencies and build the wheel file
+poetry install
+poetry build  # Creates .whl file in the 'dist' directory
+
+# Install the wheel file
+pip install dist/omni_morph-*.whl
+
+# Run commands directly (no prefix needed)
+omo-cli --help
+omo-wizard
+```
+
+With Option 2, all commands can be used directly without the `poetry run` prefix.
 
 ## Quick Start
 
