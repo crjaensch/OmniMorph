@@ -5,6 +5,8 @@ Transform, inspect, and merge data files with a single command-line Swiss Army k
   <img src="assets/omnimorph-logo.png" alt="OmniMorph Logo" width="500"/>
 </p>
 
+Want more in-depth information about OmniMorph? Visit [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/crjaensch/OmniMorph).
+
 ## Table of Contents
 
 - [Installation](#installation)
