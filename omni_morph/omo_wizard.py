@@ -7,13 +7,12 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from rich.live import Live
-from rich.panel import Panel
+from rich.live import Live  # noqa: F811
 
 from InquirerPy import inquirer
 from InquirerPy.validator import NumberValidator
-from InquirerPy.base.control import Choice
-from prompt_toolkit.completion import PathCompleter
+from InquirerPy.base.control import Choice  # noqa: F401
+from prompt_toolkit.completion import PathCompleter  # noqa: F401
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, BarColumn, TimeElapsedColumn
@@ -93,7 +92,14 @@ COMMANDS = {
         "args": [
             {"name": "--has-header", "kind": "flag", "default": True},
             {"name": "--delimiter", "kind": "text", "default": ","},
-            {"name": "--quote", "kind": "text", "default": "\""},
+            {"name": "--quote", "kind": "text", "default": '"'},
+            {"name": "file", "kind": "path", "positional": True},
+            {"name": "output", "kind": "output_path", "positional": True},
+        ]
+    },
+    "to-excel": {
+        "args": [
+            {"name": "--sheet-name", "kind": "text", "default": "Sheet1"},
             {"name": "file", "kind": "path", "positional": True},
             {"name": "output", "kind": "output_path", "positional": True},
         ]
@@ -124,6 +130,7 @@ COMMANDS = {
 
 # ---------- 2. Helpers ----------
 
+
 def ask_path(message="Select file", multi=False):
     global REMEMBERED_FILE_PATH
     try:
@@ -134,10 +141,12 @@ def ask_path(message="Select file", multi=False):
                 path = inquirer.filepath(
                     message=f"{message} (Enter to finish after selecting at least one)",
                     only_files=False,  # Allow directories to be shown for navigation
-                    validate=lambda result: True if result or paths else "Please select at least one file",
-                    mandatory=False  # Allow empty input to handle ESC key
+                    validate=lambda result: True
+                    if result or paths
+                    else "Please select at least one file",
+                    mandatory=False,  # Allow empty input to handle ESC key
                 ).execute()
-                
+
                 if not path and paths:  # Empty input after at least one file
                     break
                 elif path:
@@ -146,34 +155,40 @@ def ask_path(message="Select file", multi=False):
                         paths.append(path)
                         console.print(f"[dim]Added:[/] {path}")
                     else:
-                        console.print(f"[yellow]Please select a file, not a directory[/]")
-            
+                        console.print(
+                            "[yellow]Please select a file, not a directory[/]"  # noqa: F541
+                        )
+
             return paths
         else:
             # Show the remembered path in the message if it exists
             display_message = message
             if REMEMBERED_FILE_PATH and Path(REMEMBERED_FILE_PATH).is_file():
-                display_message = f"{message} [dim](remembered: {REMEMBERED_FILE_PATH})[/]"
+                display_message = (
+                    f"{message} [dim](remembered: {REMEMBERED_FILE_PATH})[/]"
+                )
                 # Offer to use the remembered path
                 use_remembered = inquirer.confirm(
                     message=f"Use remembered file: {REMEMBERED_FILE_PATH}?",
-                    default=True
+                    default=True,
                 ).execute()
                 if use_remembered:
                     return REMEMBERED_FILE_PATH
-            
+
             while True:
                 path = inquirer.filepath(
                     message=display_message,
                     only_files=False,  # Allow directories to be shown for navigation
-                    mandatory=False  # Allow empty input to handle ESC key
+                    mandatory=False,  # Allow empty input to handle ESC key
                 ).execute()
-                
+
                 # Check if the selected path is a file
                 if path and Path(path).is_file():
                     return path
                 elif path:
-                    console.print(f"[yellow]Please select a file, not a directory[/]")
+                    console.print(
+                        "[yellow]Please select a file, not a directory[/]"  # noqa: F541
+                    )
                 elif path == "":
                     # User pressed ESC or entered empty string
                     raise KeyboardInterrupt()
@@ -188,7 +203,7 @@ def ask_int(message, default):
             message=f"{message} (default: {default})",
             validate=NumberValidator(),
             default=default,
-            mandatory=False  # Allow empty input to handle ESC key
+            mandatory=False,  # Allow empty input to handle ESC key
         ).execute()
     except KeyboardInterrupt:
         console.print("[yellow]Returning to main menu...[/]")
@@ -207,7 +222,7 @@ def ask_text(message):
     try:
         return inquirer.text(
             message=message,
-            mandatory=False  # Allow empty input to handle ESC key
+            mandatory=False,  # Allow empty input to handle ESC key
         ).execute()
     except KeyboardInterrupt:
         console.print("[yellow]Returning to main menu...[/]")
@@ -221,12 +236,14 @@ def ask_output_path(message):
                 message=message,
                 only_files=False,  # Allow directories to be shown for navigation
                 validate=lambda result: True if result else "Please select a path",
-                mandatory=False  # Allow empty input to handle ESC key
+                mandatory=False,  # Allow empty input to handle ESC key
             ).execute()
-            
+
             # Check if the selected path is a directory
             if path and Path(path).is_dir():
-                console.print(f"[yellow]Please select a file, not a directory[/]")
+                console.print(
+                    "[yellow]Please select a file, not a directory[/]"  # noqa: F541
+                )
             elif path == "":
                 # User pressed ESC or entered empty string
                 raise KeyboardInterrupt()
@@ -239,62 +256,72 @@ def ask_output_path(message):
 
 def handle_sql_suggestion(command_str, output_lines):
     """Extract and handle SQL suggestions from AI assistance.
-    
+
     Args:
         command_str: The original command string
         output_lines: List of output lines from command execution
-        
+
     Returns:
         bool: True if a suggestion was found and executed, False otherwise
     """
-    output_text = '\n'.join(output_lines)
-    
+    output_text = "\n".join(output_lines)
+
     # Look for indicators of AI suggestion - simpler approach
-    if 'Suggested fix:' not in output_text and '💡' not in output_text:
+    if "Suggested fix:" not in output_text and "💡" not in output_text:
         return False
-        
+
     # Extract the suggested SQL query
     sql_code = None
     in_code_block = False
     code_lines = []
-    
+
     # Process each line to extract SQL code
     for line in output_lines:
         # Check for code block markers
-        if '```sql' in line:
+        if "```sql" in line:
             in_code_block = True
             continue
-        elif '```' in line and in_code_block:
+        elif "```" in line and in_code_block:
             in_code_block = False
-            sql_code = '\n'.join(code_lines)
+            sql_code = "\n".join(code_lines)
             break
         elif in_code_block:
             code_lines.append(line)
-    
+
     # If no code block found, try to extract SQL statements directly
     if not sql_code:
         for i, line in enumerate(output_lines):
-            if any(keyword in line.upper() for keyword in ['SELECT ', 'CREATE ', 'INSERT ', 'UPDATE ', 'DELETE ', 'WITH ']):
+            if any(
+                keyword in line.upper()
+                for keyword in [
+                    "SELECT ",
+                    "CREATE ",
+                    "INSERT ",
+                    "UPDATE ",
+                    "DELETE ",
+                    "WITH ",
+                ]
+            ):
                 # Found a line with SQL keywords
                 sql_start = i
                 sql_lines = [line]
                 # Collect SQL lines until we hit a likely end
                 for j in range(sql_start + 1, len(output_lines)):
-                    if not output_lines[j].strip() or ';' in output_lines[j]:
-                        if ';' in output_lines[j]:
+                    if not output_lines[j].strip() or ";" in output_lines[j]:
+                        if ";" in output_lines[j]:
                             sql_lines.append(output_lines[j])
                         break
                     sql_lines.append(output_lines[j])
-                sql_code = '\n'.join(sql_lines)
+                sql_code = "\n".join(sql_lines)
                 break
-    
+
     if sql_code:
         # Clean up the SQL code
         sql_code = sql_code.strip()
         # Remove trailing semicolon if present
-        if sql_code.endswith(';'):
+        if sql_code.endswith(";"):
             sql_code = sql_code[:-1]
-        
+
         console.print("\n[bold cyan]AI suggested a SQL query fix.[/]")
         if ask_flag("Would you like to run the suggested SQL query?", True):
             # Extract the original command parts and replace the SQL query
@@ -305,30 +332,29 @@ def handle_sql_suggestion(command_str, output_lines):
             console.print(f"[dim]Will run:[/] {new_command}")
             run_cli(new_command)
             return True
-    
+
     return False
 
 
 def run_cli(command_str):
     if command_str is None:
         return
-        
+
     console.rule(f"[bold green]Executing[/] {command_str}")
 
     # Create a separate area for command output
     output_lines = []
-    
+
     # Create a separate console for command output to avoid interference with progress bar
     output_console = Console(highlight=False)
-    
+
     # Print a header for the output to ensure separation from the progress bar
     console.print("Command Output:")
     console.print("─" * 80)
-    
+
     # Create a Live display that will properly manage the progress bar
-    from rich.live import Live
     from time import time
-    
+
     # Start the subprocess first
     proc = subprocess.Popen(
         command_str,
@@ -338,7 +364,7 @@ def run_cli(command_str):
         text=True,
         bufsize=1,
     )
-    
+
     # Create progress bar with proper time tracking
     progress = Progress(
         "[progress.description]{task.description}",
@@ -346,17 +372,17 @@ def run_cli(command_str):
         "[progress.percentage]{task.percentage:>3.0f}%",
         TimeElapsedColumn(),
         auto_refresh=False,
-        expand=True
+        expand=True,
     )
-    
+
     # Add a task and get its ID
     task_id = progress.add_task("omo-cli", total=100)
-    
+
     # Track start time
     start_time = time()
-    
+
     # Use Live display to manage the progress bar
-    with Live(progress, refresh_per_second=10, console=console) as live:
+    with Live(progress, refresh_per_second=10, console=console) as _live:  # noqa: F841
         # Process and display output
         for line in proc.stdout:
             line_text = line.rstrip()
@@ -364,22 +390,22 @@ def run_cli(command_str):
             output_console.print(line_text, end="\n")
             # Update progress to show activity
             progress.update(task_id, advance=0, refresh=True)
-            
+
         # Wait for process to complete
         proc.wait()
-        
+
         # Calculate elapsed time
         elapsed = time() - start_time
-        
+
         # Update progress to 100% with correct elapsed time
         progress.update(task_id, completed=100, refresh=True, elapsed=elapsed)
-    
+
     # Add a separator after the output
     console.print("─" * 80)
-    
+
     # Check if this is a query command with AI suggestion
-    if 'query' in command_str:
-        handled = handle_sql_suggestion(command_str, output_lines)
+    if "query" in command_str:
+        _ = handle_sql_suggestion(command_str, output_lines)  # noqa: F841
 
     if proc.returncode != 0:
         console.print(f"[bold red]omo-cli exited with code {proc.returncode}[/]")
@@ -392,25 +418,27 @@ def build_command(cmd_name):
     global REMEMBERED_FILE_PATH
     spec = COMMANDS[cmd_name]
     parts = ["omo-cli"]
-    
+
     # Handle the special case for the "remember file" command
     if cmd_name == "remember file":
         try:
             file_path = ask_path("Select file to remember")
             if file_path:
                 REMEMBERED_FILE_PATH = file_path
-                console.print(f"[bold green]Remembered file path:[/] {REMEMBERED_FILE_PATH}")
+                console.print(
+                    f"[bold green]Remembered file path:[/] {REMEMBERED_FILE_PATH}"
+                )
             return None  # No command to execute for remember
         except KeyboardInterrupt:
             return None
-    
+
     # For regular commands
     parts.append(cmd_name)
 
     try:
         # Track the current file path for format detection without changing REMEMBERED_FILE_PATH
         current_file_path = None
-        
+
         # Special handling for stats command with --fast option
         if cmd_name == "stats":
             # First ask if the user wants to use the fast option
@@ -422,7 +450,7 @@ def build_command(cmd_name):
                     kind = arg["kind"]
                     name = arg["name"]
                     is_positional = arg.get("positional", False)
-                    
+
                     # Only allow file and format options with --fast
                     if name == "file" or name == "--format":
                         if kind == "path":
@@ -440,26 +468,30 @@ def build_command(cmd_name):
                                 try:
                                     Format.from_path(file_to_check)
                                     # Format can be determined from extension, skip the prompt
-                                    console.print(f"[dim]Format detected from file extension, skipping format prompt[/]")
+                                    console.print(
+                                        "[dim]Format detected from file extension, skipping format prompt[/]"  # noqa: F541
+                                    )
                                     continue
                                 except ValueError:
                                     # Format cannot be determined, ask for it
                                     pass
-                            
-                            value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
+
+                            value = ask_text(
+                                f"{name.lstrip('-')} (leave blank to skip)"
+                            )
                             if value:
                                 if is_positional:
                                     parts.append(value)
                                 else:
                                     parts.extend([name, value])
                 return shlex.join(parts)  # Return early with only these options
-        
+
         # Normal processing for all other commands or stats without --fast
         for arg in spec["args"]:
             kind = arg["kind"]
             name = arg["name"]
             is_positional = arg.get("positional", False)
-            
+
             # Skip the --fast option for stats if we're in the normal path
             if cmd_name == "stats" and name == "--fast":
                 continue
@@ -489,7 +521,9 @@ def build_command(cmd_name):
                     parts.extend([name, str(value)])
 
             elif kind == "float":
-                value = ask_text(f"{name.lstrip('-')} (default: {arg.get('default', 0)})")
+                value = ask_text(
+                    f"{name.lstrip('-')} (default: {arg.get('default', 0)})"
+                )
                 if value:
                     if is_positional:
                         parts.append(value)
@@ -497,7 +531,9 @@ def build_command(cmd_name):
                         parts.extend([name, value])
 
             elif kind == "flag":
-                if ask_flag(f"Enable {name.lstrip('-')}", default=arg.get("default", False)):
+                if ask_flag(
+                    f"Enable {name.lstrip('-')}", default=arg.get("default", False)
+                ):
                     parts.append(name)
 
             elif kind == "text":
@@ -508,12 +544,14 @@ def build_command(cmd_name):
                         try:
                             Format.from_path(file_to_check)
                             # Format can be determined from extension, skip the prompt
-                            console.print(f"[dim]Format detected from file extension, skipping format prompt[/]")
+                            console.print(
+                                "[dim]Format detected from file extension, skipping format prompt[/]"  # noqa: F541
+                            )
                             continue
                         except ValueError:
                             # Format cannot be determined, ask for it
                             pass
-                
+
                 value = ask_text(f"{name.lstrip('-')} (leave blank to skip)")
                 if value:
                     if is_positional:
@@ -553,23 +591,23 @@ def app():
                 # Fall back to local file check if there's an error
                 if REMEMBERED_FILE_PATH:
                     file_exists = Path(REMEMBERED_FILE_PATH).is_file()
-                    
+
             if REMEMBERED_FILE_PATH and file_exists:
                 console.print(f"[dim]Remembered file:[/] {REMEMBERED_FILE_PATH}")
-            
+
             # Create choices list with remember/forget at the top
             command_choices = []
             if REMEMBERED_FILE_PATH:
                 command_choices.append("forget file")
             else:
                 command_choices.append("remember file")
-                
+
             # Add all other commands
             command_choices.extend(list(COMMANDS))
             # Add quit option at the end
             command_choices.append("QUIT")
-            
-            cmd_name = inquirer.select(                    # list prompt
+
+            cmd_name = inquirer.select(  # list prompt
                 message="Choose a command",
                 choices=command_choices,
                 long_instruction="Arrow keys to move ‣ Enter to select ‣ CTRL-C to cancel",
@@ -589,7 +627,7 @@ def app():
             command_str = build_command(cmd_name)
             if command_str is None:
                 continue
-                
+
             console.print(f"[dim]Will run:[/] {command_str}")
             try:
                 if ask_flag("Proceed?", True):

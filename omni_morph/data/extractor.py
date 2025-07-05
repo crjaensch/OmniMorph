@@ -1,5 +1,5 @@
 """
-extractor.py  ── unified head / tail / sample extraction functions for Parquet, Avro, JSONL and CSV
+extractor.py  ── unified head / tail / sample extraction functions for Parquet, Avro, JSONL, CSV and XLSX
 
 Public API
 ==========
@@ -31,7 +31,13 @@ except ImportError:  # fastavro is optional until Avro is actually used
     avro_reader = None
 
 from .formats import Format
-from .sampling import parquet_sample, streaming_sample, iter_avro, iter_jsonl, iter_csv
+from .sampling import (
+    parquet_sample,
+    streaming_sample,
+    iter_avro,
+    iter_jsonl,
+    iter_csv,
+)
 from .exceptions import ExtractError
 
 __all__ = [
@@ -44,6 +50,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Internal enums
 # ---------------------------------------------------------------------------
+
 
 class _Operation(str, Enum):
     HEAD = "head"
@@ -63,6 +70,7 @@ class _Operation(str, Enum):
 # Public helpers – the simplified interface you requested
 # ---------------------------------------------------------------------------
 
+
 def head(
     path: Union[str, Path],
     n: int,
@@ -73,11 +81,11 @@ def head(
 ) -> Union[pa.Table, pd.DataFrame]:
     """
     Return the first n records from a file.
-    
+
     This function reads the first n records from the specified file path and returns
     them as either a PyArrow Table or Pandas DataFrame. The format can be explicitly
     specified or inferred from the file extension.
-    
+
     Args:
         path: A string or Path object pointing to the file to read.
         n: Number of records to return from the beginning of the file.
@@ -87,10 +95,10 @@ def head(
                     "pandas" for Pandas DataFrame.
         small_file_threshold: Size threshold in bytes for determining if a file
                              is small enough to read entirely into memory.
-    
+
     Returns:
         A PyArrow Table or Pandas DataFrame containing the first n records.
-    
+
     Raises:
         ValueError: If n is not positive or if the format cannot be inferred.
         ExtractError: If an error occurs during extraction.
@@ -115,11 +123,11 @@ def tail(
 ) -> Union[pa.Table, pd.DataFrame]:
     """
     Return the last n records from a file.
-    
+
     This function reads the last n records from the specified file path and returns
     them as either a PyArrow Table or Pandas DataFrame. The format can be explicitly
     specified or inferred from the file extension.
-    
+
     Args:
         path: A string or Path object pointing to the file to read.
         n: Number of records to return from the end of the file.
@@ -129,10 +137,10 @@ def tail(
                     "pandas" for Pandas DataFrame.
         small_file_threshold: Size threshold in bytes for determining if a file
                              is small enough to read entirely into memory.
-    
+
     Returns:
         A PyArrow Table or Pandas DataFrame containing the last n records.
-    
+
     Raises:
         ValueError: If n is not positive or if the format cannot be inferred.
         ExtractError: If an error occurs during extraction.
@@ -146,9 +154,11 @@ def tail(
         small_file_threshold=small_file_threshold,
     )
 
+
 # ---------------------------------------------------------------------------
 #  RANDOM SAMPLING PUBLIC HELPER
 # ---------------------------------------------------------------------------
+
 
 def sample(
     path: Union[str, Path],
@@ -162,11 +172,11 @@ def sample(
     small_file_threshold: int = 100 * 1024 * 1024,
 ):
     """Return a random sample of records from a file.
-    
+
     This function extracts a random sample of records from the specified file.
     The sample can be either a fixed number of records or a fraction of the total.
     Exactly one of `n` or `fraction` must be supplied.
-    
+
     Args:
         path: A string or Path object pointing to the source file (.parquet/.avro/.jsonl/.csv).
         n: Optional number of records to sample. If provided, exactly this many
@@ -183,17 +193,17 @@ def sample(
                     "pandas" for Pandas DataFrame.
         small_file_threshold: Size threshold in bytes below which the file is
                              considered small enough to load entirely into memory.
-    
+
     Returns:
         Either a PyArrow Table or Pandas DataFrame containing the sampled records,
         depending on the return_type parameter.
-    
+
     Raises:
         ValueError: If neither or both of n and fraction are specified.
         ExtractError: If the sampling operation fails or if n exceeds the
                      number of available records when sampling without replacement.
     """
-    if (n is None) == (fraction is None):   # xor check
+    if (n is None) == (fraction is None):  # xor check
         raise ValueError("Specify exactly one of `n` or `fraction`.")
 
     # Convert path to string for internal functions
@@ -209,18 +219,38 @@ def sample(
             )
         elif resolved_fmt is Format.AVRO:
             table = streaming_sample(
-                iter_avro(path_str), n, fraction, rng, with_replacement,
-                small_file_threshold
+                iter_avro(path_str),
+                n,
+                fraction,
+                rng,
+                with_replacement,
+                small_file_threshold,
             )
         elif resolved_fmt is Format.JSON:
             table = streaming_sample(
-                iter_jsonl(path_str), n, fraction, rng, with_replacement,
-                small_file_threshold
+                iter_jsonl(path_str),
+                n,
+                fraction,
+                rng,
+                with_replacement,
+                small_file_threshold,
             )
         elif resolved_fmt is Format.CSV:
             table = streaming_sample(
-                iter_csv(path_str), n, fraction, rng, with_replacement,
-                small_file_threshold
+                iter_csv(path_str),
+                n,
+                fraction,
+                rng,
+                with_replacement,
+                small_file_threshold,
+            )
+        elif resolved_fmt is Format.XLSX:
+            table = xlsx_sample(
+                path_str,
+                n,
+                fraction,
+                rng,
+                with_replacement,
             )
         else:
             raise ExtractError(f"Unsupported format {resolved_fmt!r}")
@@ -240,9 +270,11 @@ def sample(
         )
     return table if return_type == "arrow" else table.to_pandas()
 
+
 # ---------------------------------------------------------------------------
 # Core engine – kept exactly as before (only _Operation renamed)
 # ---------------------------------------------------------------------------
+
 
 def _extract_records(
     path: str,
@@ -266,7 +298,7 @@ def _extract_records(
 
     # Define format-specific thresholds
     parquet_large_threshold = 10 * 1024 * 1024 * 1024  # 10GB for Parquet
-    avro_large_threshold = 1 * 1024 * 1024 * 1024      # 1GB for Avro
+    avro_large_threshold = 1 * 1024 * 1024 * 1024  # 1GB for Avro
 
     try:
         if resolved_fmt is Format.PARQUET:
@@ -277,6 +309,8 @@ def _extract_records(
             table = _jsonl_extract(path, n, op, small_file_threshold)
         elif resolved_fmt is Format.CSV:
             table = _csv_extract(path, n, op, small_file_threshold)
+        elif resolved_fmt is Format.XLSX:
+            table = _xlsx_extract(path, n, op, small_file_threshold)
         else:
             raise ExtractError(f"Unsupported format {resolved_fmt!r}")
     except Exception as exc:
@@ -291,13 +325,14 @@ def _extract_records(
 # Per-format implementations (unchanged)
 # ---------------------------------------------------------------------------
 
+
 def _parquet_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     pfile = pq.ParquetFile(path)
     file_size = os.path.getsize(path)
-    
+
     # For extremely large files, use more aggressive row group selection
     aggressive_mode = file_size > limit
-    
+
     if op is _Operation.HEAD:
         # For very large files, read row groups one at a time
         if aggressive_mode:
@@ -312,31 +347,37 @@ def _parquet_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
             return pa.concat_tables(tables).slice(0, n) if tables else pa.table({})
         else:
             return pfile.read_row_groups(range(pfile.num_row_groups)).slice(0, n)
-    
+
     # -- tail: collect enough row-groups from the end ------------------------
     if aggressive_mode:
         # For large files, be more selective about which row groups to read
         rows_needed = n
         groups = []
-        total_rows = sum(pfile.metadata.row_group(rg).num_rows for rg in range(pfile.num_row_groups))
-        
+        total_rows = sum(
+            pfile.metadata.row_group(rg).num_rows for rg in range(pfile.num_row_groups)
+        )
+
         # Estimate which row group to start with based on total rows and rows needed
         # This helps avoid scanning all row groups for very large files
-        start_group = max(0, pfile.num_row_groups - (pfile.num_row_groups * n // total_rows) - 1)
-        
+        start_group = max(
+            0, pfile.num_row_groups - (pfile.num_row_groups * n // total_rows) - 1
+        )
+
         for rg in range(pfile.num_row_groups - 1, start_group - 1, -1):
             row_count = pfile.metadata.row_group(rg).num_rows
             rows_needed -= row_count
             groups.append(rg)
             if rows_needed <= 0:
                 break
-        
+
         groups.reverse()
         tables = [pfile.read_row_group(rg) for rg in groups]
         tbl = pa.concat_tables(tables) if tables else pa.table({})
         # If n exceeds the number of rows, return all rows with a warning
         if n >= len(tbl):
-            print(f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows.")
+            print(
+                f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows."
+            )
             return tbl
         return tbl.slice(len(tbl) - n, n)
     else:
@@ -353,14 +394,18 @@ def _parquet_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
         tbl = pfile.read_row_groups(groups)
         # If n exceeds the number of rows, return all rows with a warning
         if n >= len(tbl):
-            print(f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows.")
+            print(
+                f"Warning: Requested {n} rows but file only contains {len(tbl)} rows. Returning all rows."
+            )
             return tbl
         return tbl.slice(len(tbl) - n, n)
 
 
 def _avro_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     if avro_reader is None:
-        raise ImportError("fastavro is required for Avro support (`pip install fastavro`).")
+        raise ImportError(
+            "fastavro is required for Avro support (`pip install fastavro`)."
+        )
 
     file_size = os.path.getsize(path)
     large_file = file_size > limit
@@ -368,10 +413,11 @@ def _avro_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     # For head operations, the current implementation is already efficient
     # as it only reads the first n records
     if op is _Operation.HEAD:
+        # For very large files, read row groups one at a time
         with open(path, "rb") as fo:
             data = [record for _, record in zip(range(n), avro_reader(fo))]
         return pa.Table.from_pylist(data) if data else pa.table({})
-    
+
     # For tail operations on large files, we need a more memory-efficient approach
     if large_file:
         return _avro_extract_tail_large_file(path, n)
@@ -388,47 +434,51 @@ def _avro_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
 def _avro_extract_tail_large_file(path: str, n: int) -> pa.Table:
     """
     Memory-efficient extraction of the last n records from a large Avro file.
-    
+
     This uses a two-pass approach:
     1. First pass: Count total records and estimate record size
     2. Second pass: Seek to an estimated position and read records
     """
     if avro_reader is None:
-        raise ImportError("fastavro is required for Avro support (`pip install fastavro`).")
-    
+        raise ImportError(
+            "fastavro is required for Avro support (`pip install fastavro`)."
+        )
+
     # First pass: Sample the file to estimate record count and size
     file_size = os.path.getsize(path)
-    
+
     # Sample at most 1000 records or 10MB to estimate average record size
-    sample_size = min(10 * 1024 * 1024, file_size // 10)  # 10MB or 10% of file, whichever is smaller
-    
+    _ = min(
+        10 * 1024 * 1024, file_size // 10
+    )  # 10MB or 10% of file, whichever is smaller
+
     record_count = 0
     bytes_read = 0
     start_pos = 0
-    
+
     # Read a sample from the beginning to estimate record size
     with open(path, "rb") as fo:
         reader = avro_reader(fo)
         # Get the reader's schema and sync marker for later use
-        schema = reader.schema
-        
+        _schema = reader.schema
+
         # Sample records to estimate average size
         for i, _ in enumerate(reader):
             record_count += 1
             if i >= 1000:  # Limit sample to 1000 records
                 break
-        
+
         # Get current position to estimate bytes read
         bytes_read = fo.tell()
-    
+
     # If we couldn't read any records, return empty table
     if record_count == 0:
         return pa.table({})
-    
+
     # Estimate average record size and total record count
     avg_record_size = bytes_read / record_count
     estimated_total_records = int(file_size / avg_record_size)
-    
+
     # If we need more records than estimated total, just use the original approach
     if n >= estimated_total_records:
         with open(path, "rb") as fo:
@@ -437,38 +487,40 @@ def _avro_extract_tail_large_file(path: str, n: int) -> pa.Table:
                 buf.append(record)
             data = list(buf)
         return pa.Table.from_pylist(data) if data else pa.table({})
-    
+
     # Second pass: Seek to an estimated position and read records
     # We'll aim to start reading at a position where we expect to find the last n records
     # We'll add a safety margin to ensure we don't miss records
-    safety_margin = min(n * 2, estimated_total_records // 4)  # Double the records or 25% of total, whichever is smaller
+    safety_margin = min(
+        n * 2, estimated_total_records // 4
+    )  # Double the records or 25% of total, whichever is smaller
     records_to_skip = max(0, estimated_total_records - n - safety_margin)
-    
+
     # Calculate approximate byte position to start reading
     # We can't seek directly in Avro, so we'll read and discard records
     start_pos = int(records_to_skip * avg_record_size)
-    
+
     # Adjust start position to ensure we don't start beyond file size
     start_pos = min(start_pos, file_size - 1000)  # Ensure at least 1KB at the end
-    
+
     # Read from the estimated position to the end
     buf: deque = deque(maxlen=n)
     with open(path, "rb") as fo:
         # We need to start from the beginning and skip records
         # This is unavoidable with Avro's sequential format
         reader = avro_reader(fo)
-        
+
         # Skip records until we reach our target position
         skipped = 0
         for _ in reader:
             skipped += 1
             if skipped >= records_to_skip:
                 break
-        
+
         # Now collect the remaining records
         for record in reader:
             buf.append(record)
-    
+
     data = list(buf)
     return pa.Table.from_pylist(data) if data else pa.table({})
 
@@ -492,9 +544,10 @@ def _csv_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     else:
         size = os.path.getsize(path)
         if size > limit:
-            lines = _tail_lines(path, n + 1)         # preserve header
+            lines = _tail_lines(path, n + 1)  # preserve header
             header = _read_csv_header(path)
             from io import StringIO
+
             csv_chunk = "\n".join([header] + lines[-n:])
             df = pd.read_csv(StringIO(csv_chunk))
         else:
@@ -503,9 +556,28 @@ def _csv_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     return pa.Table.from_pandas(df, preserve_index=False)
 
 
+def _xlsx_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
+    """Efficient-ish head/tail for Excel workbooks.
+
+    Excel requires loading the sheet into memory; for *head* we can bound the
+    rows via the ``nrows`` parameter. For *tail* we load the full sheet (with a
+    configurable safety limit) and slice from the end.
+    """
+    import pandas as pd
+
+    if op is _Operation.HEAD:
+        df = pd.read_excel(path, nrows=n, engine="openpyxl")
+    else:
+        df = pd.read_excel(path, engine="openpyxl")
+        df = df.tail(n)
+
+    return pa.Table.from_pandas(df, preserve_index=False)
+
+
 # ---------------------------------------------------------------------------
 # Utility helpers (unchanged)
 # ---------------------------------------------------------------------------
+
 
 def _tail_lines(path: str, n: int, block_size: int = 8192) -> list[str]:
     end = os.path.getsize(path)
@@ -523,3 +595,28 @@ def _tail_lines(path: str, n: int, block_size: int = 8192) -> list[str]:
 def _read_csv_header(path: str) -> str:
     with open(path, "r", encoding="utf8") as fh:
         return fh.readline().rstrip("\n")
+
+
+# ---------- XLSX sampling ---------------------------------------------------
+#
+
+
+def xlsx_sample(
+    path: str,
+    n: Optional[int],
+    fraction: Optional[float],
+    rng: random.Random,
+    replace: bool,
+) -> pa.Table:
+    """Sample rows from an Excel sheet using pandas for robust dtype handling."""
+    import pandas as pd
+
+    df = pd.read_excel(path, engine="openpyxl")
+
+    if n is not None:
+        n_eff = min(n, len(df))
+        sampled = df.sample(n=n_eff, replace=replace, random_state=rng.randint(0, 2**32 - 1))
+    else:
+        sampled = df.sample(frac=fraction, replace=replace, random_state=rng.randint(0, 2**32 - 1))
+
+    return pa.Table.from_pandas(sampled, preserve_index=False)

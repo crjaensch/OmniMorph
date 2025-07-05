@@ -1,8 +1,6 @@
 from __future__ import annotations
-import os
 import random
-from typing import Iterable, Optional, Union, BinaryIO
-from pathlib import Path
+from typing import Iterable, Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -19,6 +17,7 @@ from .filesystems import FileSystemHandler
 #  PARQUET SAMPLING (efficient row-group aware)
 # ---------------------------------------------------------------------------
 
+
 def parquet_sample(
     path: str,
     n: Optional[int],
@@ -29,14 +28,14 @@ def parquet_sample(
 ) -> pa.Table:
     # Use FileSystemHandler to handle both local and Azure paths
     fs, fs_path = FileSystemHandler.get_fs_and_path(path)
-    
+
     # Create ParquetFile using fsspec filesystem
     pfile = pq.ParquetFile(fs_path, filesystem=fs)
     total_rows = pfile.metadata.num_rows
-    
+
     # Get file size using FileSystemHandler
     file_info = FileSystemHandler.get_file_info(path)
-    file_size = file_info.get('size', 0)
+    file_size = file_info.get("size", 0)
 
     # ---------- choose indices ------------------------------------------------
     if fraction is not None:
@@ -47,13 +46,15 @@ def parquet_sample(
             chosen_idx = [rng.randrange(total_rows) for _ in range(n)]
         else:
             if n > total_rows:
-                print(f"Warning: Requested {n} samples but file only contains {total_rows} rows. Returning all rows.")
+                print(
+                    f"Warning: Requested {n} samples but file only contains {total_rows} rows. Returning all rows."
+                )
                 chosen_idx = list(range(total_rows))
             else:
                 chosen_idx = rng.sample(range(total_rows), n)
 
     if not chosen_idx:
-        return pa.table({})      # empty sample
+        return pa.table({})  # empty sample
 
     chosen_idx.sort()
 
@@ -72,7 +73,7 @@ def parquet_sample(
         offset += rows_here
 
     # Determine which row-groups contain each selected index
-    needed_rgs   = set()
+    needed_rgs = set()
     by_rg_offset = {}
     for idx in chosen_idx:
         for start, stop, rg in rg_boundaries:
@@ -94,6 +95,7 @@ def parquet_sample(
 #  STREAMING (reservoir) SAMPLING  for Avro / JSONL / CSV
 # ---------------------------------------------------------------------------
 
+
 def streaming_sample(
     iterator: Iterable[dict],
     n: Optional[int],
@@ -111,7 +113,7 @@ def streaming_sample(
     if replace and n is not None:
         raise ExtractError("`with_replacement=True` not supported for large files.")
 
-    if n is not None:                 # reservoir, one pass, O(n) memory
+    if n is not None:  # reservoir, one pass, O(n) memory
         reservoir: list[dict] = []
         for i, rec in enumerate(iterator):
             if i < n:
@@ -121,7 +123,7 @@ def streaming_sample(
                 if j < n:
                     reservoir[j] = rec
         data = reservoir
-    else:                             # fraction sampling
+    else:  # fraction sampling
         data = [rec for rec in iterator if rng.random() < fraction]
 
     return pa.Table.from_pylist(data) if data else pa.table({})
@@ -141,7 +143,9 @@ def sample_in_memory(
             sample = [rng.choice(data) for _ in range(n)]
         else:
             if n > len(data):
-                print(f"Warning: Requested {n} samples but only {len(data)} records are available. Returning all records.")
+                print(
+                    f"Warning: Requested {n} samples but only {len(data)} records are available. Returning all records."
+                )
                 sample = data.copy()
             else:
                 sample = rng.sample(data, n)
@@ -152,6 +156,7 @@ def sample_in_memory(
 # ---------------------------------------------------------------------------
 #  PER-FORMAT ITERATORS  (streaming)
 # ---------------------------------------------------------------------------
+
 
 def iter_avro(path: str):
     if avro_reader is None:
@@ -164,6 +169,7 @@ def iter_avro(path: str):
 
 def iter_jsonl(path: str):
     import json
+
     # Use FileSystemHandler to handle both local and Azure paths
     with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
         for line in fh:
@@ -174,11 +180,34 @@ def iter_jsonl(path: str):
 def iter_csv(path: str):
     import csv
     import io
+
     # Use FileSystemHandler to handle both local and Azure paths
     with FileSystemHandler.open_file(path, "r", newline="", encoding="utf8") as fh:
         # Ensure we have a proper file-like object for csv.DictReader
-        if not hasattr(fh, 'read') or not callable(fh.read):
+        if not hasattr(fh, "read") or not callable(fh.read):
             fh = io.StringIO(fh.read())
         rdr = csv.DictReader(fh)
         for row in rdr:
             yield row
+
+
+def iter_xlsx(path: str, *, sheet_name: int | str = 0):
+    """Stream records from an Excel worksheet as dictionaries.
+
+    The entire sheet is currently loaded into memory via ``pandas.read_excel``
+    (openpyxl engine). Excel’s format does not support true streaming reads,
+    so this mirrors the behaviour for other *small* text files and keeps the
+    iterator interface consistent for the sampling logic.
+
+    Args:
+        path: Local path or URL to the ``.xlsx`` file.
+        sheet_name: Worksheet index or name (default: first sheet).
+
+    Yields:
+        dict: Row records compatible with :pyfunc:`streaming_sample`.
+    """
+    import pandas as pd
+
+    df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
+    for rec in df.to_dict(orient="records"):
+        yield rec

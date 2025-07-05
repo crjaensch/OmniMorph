@@ -1,16 +1,18 @@
 import json
 from pathlib import Path
 import pytest
-
-base_dir = Path(__file__).parent.parent / "data" / "sample-data"
-
 from omni_morph.data.statistics import get_stats
 
-@pytest.mark.parametrize("subdir,ext", [("csv","csv"),("avro","avro"),("parquet","parquet")])
+# Base directory for sample data
+base_dir = Path(__file__).parent.parent / "data" / "sample-data"
+
+@pytest.mark.parametrize(
+    "subdir,ext", [("csv", "csv"), ("avro", "avro"), ("parquet", "parquet")]
+)
 def test_get_stats_userdata1(subdir, ext):
     data_dir = base_dir / subdir
     csv_file = data_dir / f"userdata1.{ext}"
-    expected_file = data_dir / f"userdata1_stats.json"
+    expected_file = data_dir / "userdata1_stats.json"
     expected = json.loads(expected_file.read_text())
     stats = get_stats(csv_file)
     # deep compare stats structure with expected
@@ -34,8 +36,11 @@ def test_get_stats_userdata1(subdir, ext):
             assert got["distinct"] == exp["distinct"]
             # normalize values to strings (e.g., Timestamp from parquet)
             got_top = sorted(
-                [ {"value": str(item["value"]), "count": item["count"]} for item in got["top5"] ],
-                key=lambda x: (x["value"], x["count"])
+                [
+                    {"value": str(item["value"]), "count": item["count"]}
+                    for item in got["top5"]
+                ],
+                key=lambda x: (x["value"], x["count"]),
             )
             exp_top = sorted(exp["top5"], key=lambda x: (x["value"], x["count"]))
             assert got_top == exp_top

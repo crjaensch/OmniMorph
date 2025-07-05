@@ -1,5 +1,4 @@
-from typing import Optional, List
-from pathlib import Path
+from typing import Optional
 import json
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -19,6 +18,7 @@ except ImportError:  # fastavro is optional until Avro is actually used
 #  MERGE FILES  --------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
+
 def merge_files(
     sources: list[str],
     output_path: str,
@@ -29,7 +29,7 @@ def merge_files(
     progress: bool = False,
 ):
     """
-    Merge multiple data files of possibly different format, like parquet, avro, JSON or CSV, 
+    Merge multiple data files of possibly different format, like parquet, avro, JSON or CSV,
     that share the same logical schema into a single output file.
 
     This function combines multiple data files into a single output file, handling
@@ -92,28 +92,32 @@ def merge_files(
     if progress:
         print(f"Merge complete → {output_path}  ({rows_written:,} rows)")
 
+
 # ---------------------------------------------------------------------------
 #  Helpers for merge()  ------------------------------------------------------
 # ---------------------------------------------------------------------------
 
+
 def _reconcile_schema(tbl: pa.Table, target: pa.Schema) -> pa.Table:
     """
     Reconcile a table's schema with a target schema by adding missing columns and casting types.
-    
+
     Args:
         tbl: PyArrow Table to reconcile
         target: Target PyArrow Schema to conform to
-        
+
     Returns:
         PyArrow Table with schema matching the target schema
-        
+
     Raises:
         ExtractError: If column types cannot be cast to target types
     """
     # add missing cols
     for name in target.names:
         if name not in tbl.schema.names:
-            tbl = tbl.append_column(name, pa.nulls(len(tbl), type=target.field(name).type))
+            tbl = tbl.append_column(
+                name, pa.nulls(len(tbl), type=target.field(name).type)
+            )
     # reorder & cast
     cols = []
     for field in target:
@@ -126,21 +130,22 @@ def _reconcile_schema(tbl: pa.Table, target: pa.Schema) -> pa.Table:
         cols.append(arr)
     return pa.table(cols, names=target.names)
 
+
 def _open_writer(path: str, fmt: str, schema: pa.Schema):
     """
     Create a format-specific writer function for the given output path and schema.
-    
+
     Creates a callable that writes PyArrow Tables to the specified format.
     The returned callable has a .close() method to properly release resources.
-    
+
     Args:
         path: Output file path
         fmt: Output format ('parquet', 'avro', 'csv', or 'jsonl')
         schema: PyArrow Schema for the output file
-        
+
     Returns:
         A callable that accepts a PyArrow Table and writes it to the output file
-        
+
     Raises:
         ImportError: If format-specific dependencies are missing
     """
@@ -148,55 +153,69 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
         # Use FileSystemHandler to get filesystem and path for Azure support
         fs, fs_path = FileSystemHandler.get_fs_and_path(path)
         writer = pq.ParquetWriter(fs_path, schema, filesystem=fs)
-        write_func = lambda tbl: writer.write_table(tbl)
-        write_func.close = lambda: writer.close()
-        return write_func
+
+        def _write(tbl: pa.Table):  # noqa: D401
+            """Write a table to the Parquet writer."""
+            writer.write_table(tbl)
+
+        # Provide a close method so caller can finalise resources
+        _write.close = writer.close  # type: ignore[attr-defined]
+
+        return _write
     if fmt == "avro":
         if avro_reader is None:
             raise ImportError("fastavro needed for Avro.")
         from fastavro import writer as avro_writer, parse_schema
+
         avro_schema = json.loads(schema.to_json())
         # Use FileSystemHandler to open file for Azure support
         fo = FileSystemHandler.open_file(path, "wb")
+
         def _write(tbl):
             records = tbl.to_pylist()
             avro_writer(fo, parse_schema(avro_schema), records)
-        _write.close = lambda : fo.close()
+
+        _write.close = lambda: fo.close()
         return _write
     if fmt == "csv":
         header_written = False
         # Use FileSystemHandler to open file for Azure support
         fo = FileSystemHandler.open_file(path, "w", newline="", encoding="utf8")
+
         def _write(tbl):
             nonlocal header_written
             df = tbl.to_pandas()
             df.to_csv(fo, index=False, header=not header_written, mode="a")
             header_written = True
-        _write.close = lambda : fo.close()
+
+        _write.close = lambda: fo.close()
         return _write
     if fmt == "jsonl":
         # Use FileSystemHandler to open file for Azure support
         fo = FileSystemHandler.open_file(path, "w", encoding="utf8")
+
         def _write(tbl):
             for rec in tbl.to_pylist():
                 fo.write(json.dumps(rec, default=str) + "\n")
-        _write.close = lambda : fo.close()
+
+        _write.close = lambda: fo.close()
         return _write
+
 
 def _batch_reader(path: str, chunksize: int):
     """
     Read data from a file in batches, yielding PyArrow Tables.
-    
+
     Handles different file formats (parquet, avro, csv, jsonl) with format-appropriate
     chunking strategies to maintain bounded memory usage.
-    
+
     Args:
         path: Path to the input file
         chunksize: Maximum number of rows to load per batch
-        
+
     Yields:
         PyArrow Tables containing batches of data from the input file
-        
+
     Raises:
         ImportError: If format-specific dependencies are missing
         ExtractError: If the input format is not supported
@@ -224,16 +243,18 @@ def _batch_reader(path: str, chunksize: int):
                 yield pa.Table.from_pylist(batch)
     elif fmt == "csv":
         # Use FileSystemHandler to open file for Azure support
-        with FileSystemHandler.open_file(path, 'r', encoding='utf-8') as f:
+        with FileSystemHandler.open_file(path, "r", encoding="utf-8") as f:
             # Create a pandas-compatible file-like object if needed
-            if not hasattr(f, 'read') or not callable(f.read):
+            if not hasattr(f, "read") or not callable(f.read):
                 import io
+
                 f = io.StringIO(f.read())
             # Read CSV in chunks
             for df in pd.read_csv(f, chunksize=chunksize):
                 yield pa.Table.from_pandas(df, preserve_index=False)
     elif fmt == "jsonl":
         import json
+
         batch = []
         # Use FileSystemHandler to open file for Azure support
         with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:

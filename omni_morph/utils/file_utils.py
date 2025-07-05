@@ -2,14 +2,12 @@
 file_utils.py
 
 Utilities for extracting schemas from data files.
-Supports Parquet, Avro, JSON, and CSV formats.
+Supports Parquet, Avro, JSON, CSV, and XLSX formats.
 """
 
 import json
 from json import JSONDecodeError
-from pathlib import Path
-from typing import Any, Optional, Union
-import os
+from typing import Any, Optional
 import datetime as _dt
 from omni_morph.data.formats import Format
 from omni_morph.data.filesystems import FileSystemHandler
@@ -21,14 +19,15 @@ import pyarrow.parquet as pq
 import fastavro
 from genson import SchemaBuilder
 
+
 def _infer_json_schema(filepath: str):
     """
     Infer JSON schema: handles both JSON and JSONL (first record) using GenSON.
-    
+
     Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     builder = SchemaBuilder()
-    with FileSystemHandler.open_file(filepath, 'r', encoding='utf-8') as f:
+    with FileSystemHandler.open_file(filepath, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
         except JSONDecodeError:
@@ -42,13 +41,14 @@ def _infer_json_schema(filepath: str):
     builder.add_object(data)
     return builder.to_schema()
 
+
 def get_schema(filepath: str, fmt: Format = None):
     """
     Extract the schema from a data file.
 
     Args:
         filepath (str): Path to the data file.
-        fmt (Format, optional): Override format inference. Supported: 'parquet', 'avro', 'json', 'csv'.
+        fmt (Format, optional): Override format inference. Supported: 'parquet', 'avro', 'json', 'csv', 'xlsx'.
 
     Returns:
         The extracted schema. Type depends on format:
@@ -56,6 +56,7 @@ def get_schema(filepath: str, fmt: Format = None):
         - Avro: dict representing schema
         - JSON: dict representing JSON Schema
         - CSV: dict representing inferred schema
+        - XLSX: dict representing inferred schema (Arrow-style)
 
     Raises:
         ValueError: If format is unsupported or cannot be inferred.
@@ -68,10 +69,21 @@ def get_schema(filepath: str, fmt: Format = None):
     if resolved_fmt == Format.PARQUET:
         schema = pq.read_schema(filepath)
         # Convert pyarrow.Schema to JSON-serializable dict
-        return {"fields": [{"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in schema]}
+        return {
+            "fields": [
+                {"name": f.name, "type": str(f.type), "nullable": f.nullable}
+                for f in schema
+            ]
+        }
     if resolved_fmt == Format.AVRO:
-        with FileSystemHandler.open_file(filepath, 'rb') as fo:
+        with FileSystemHandler.open_file(filepath, "rb") as fo:
             reader = fastavro.reader(fo)
+            # fastavro ≤1.9 exposed `schema`, newer versions renamed to
+            # `writer_schema` and emit a DeprecationWarning when `schema` is
+            # accessed. Use the new attribute if present **without** touching
+            # the deprecated one to keep tests warning-free.
+            if hasattr(reader, "writer_schema"):
+                return reader.writer_schema
             return reader.schema
     if resolved_fmt == Format.JSON:
         return _infer_json_schema(filepath)
@@ -80,14 +92,18 @@ def get_schema(filepath: str, fmt: Format = None):
             return infer_csv_schema(filepath)
         except Exception as e:
             raise ValueError(f"CSV schema inference failed: {str(e)}")
+    if resolved_fmt == Format.XLSX:
+        return _infer_xlsx_schema(filepath)
 
     raise ValueError(
-        f"Unsupported format {resolved_fmt!r}. Supported formats: parquet, avro, json, csv."
+        f"Unsupported format {resolved_fmt!r}. Supported formats: parquet, avro, json, csv, xlsx."
     )
+
 
 # ---------------------------------------------------------------------------
 #  METADATA HELPER  ----------------------------------------------------------
 # ---------------------------------------------------------------------------
+
 
 def get_metadata(
     filepath: str,
@@ -121,19 +137,19 @@ def get_metadata(
     # ---------- filesystem --------------------------------------------------
     # Get file info from the appropriate filesystem
     file_info = FileSystemHandler.get_file_info(filepath)
-    file_size = file_info.get('size', 0)
-    
+    file_size = file_info.get("size", 0)
+
     # Try to get timestamps (may not be available for all filesystems)
-    created = file_info.get('created', None)
-    modified = file_info.get('mtime', None)
-    
+    created = file_info.get("created", None)
+    modified = file_info.get("mtime", None)
+
     # Convert to datetime objects if available
     if created is not None:
         created = _dt.datetime.fromtimestamp(created, _dt.timezone.utc)
     else:
         # Default to current time if not available
         created = _dt.datetime.now(_dt.timezone.utc)
-        
+
     if modified is not None:
         modified = _dt.datetime.fromtimestamp(modified, _dt.timezone.utc)
     else:
@@ -162,7 +178,14 @@ def get_metadata(
     elif resolved_fmt == Format.JSON:
         num_records = _count_lines(filepath, encoding or "utf-8", small_file_threshold)
     elif resolved_fmt == Format.CSV:
-        num_records = _count_csv_rows(filepath, encoding or "utf-8", small_file_threshold)
+        num_records = _count_csv_rows(
+            filepath, encoding or "utf-8", small_file_threshold
+        )
+    elif resolved_fmt == Format.XLSX:
+        from omni_morph.data import converter as _converter  # local import
+
+        tbl = _converter.read(filepath, fmt=Format.XLSX)
+        num_records = tbl.num_rows
     else:
         raise ExtractError(f"Unsupported format {resolved_fmt!r}")
 
@@ -180,10 +203,11 @@ def get_metadata(
 #  Helpers for meta()  -------------------------------------------------------
 # ---------------------------------------------------------------------------
 
+
 def _guess_encoding(filepath: str, sample_bytes: int) -> str:
     """
     Best-effort encoding sniff (defaults to UTF-8).
-    
+
     Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     try:
@@ -200,13 +224,13 @@ def _guess_encoding(filepath: str, sample_bytes: int) -> str:
 def _count_avro(path: str, limit: int) -> int:
     """
     Count records in an Avro data file without loading it fully into RAM.
-    
+
     Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     # Get file info to check size
     file_info = FileSystemHandler.get_file_info(path)
-    size = file_info.get('size', 0)
-    
+    size = file_info.get("size", 0)
+
     if size < limit:  # small file → load once
         with FileSystemHandler.open_file(path, "rb") as fo:
             return sum(1 for _ in fastavro.reader(fo))
@@ -222,13 +246,13 @@ def _count_avro(path: str, limit: int) -> int:
 def _count_lines(path: str, encoding: str, limit: int) -> int:
     """
     Fast line count for JSONL.
-    
+
     Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     # Get file info to check size
     file_info = FileSystemHandler.get_file_info(path)
-    size = file_info.get('size', 0)
-    
+    size = file_info.get("size", 0)
+
     count = 0
     with FileSystemHandler.open_file(path, "r", encoding=encoding) as fh:
         if size < limit:
@@ -245,38 +269,58 @@ def _count_lines(path: str, encoding: str, limit: int) -> int:
                     break
                 if line.strip():
                     sample_lines.append(line)
-            
+
             if not sample_lines:
                 return 0  # Empty file or no valid lines
-                
+
             # Calculate average line length from sample
-            avg_line_length = sum(len(line) for line in sample_lines) / len(sample_lines)
-            
+            avg_line_length = sum(len(line) for line in sample_lines) / len(
+                sample_lines
+            )
+
             # Estimate total lines based on file size and average line length
             # This is an approximation and might not be 100% accurate
             estimated_lines = int(size / avg_line_length)
-            
+
             # Add count from sample
             count = len(sample_lines)
-            
+
             # If we've read less than 10% of the file, extrapolate
             if sample_size * avg_line_length < size * 0.1:
                 return estimated_lines
-            
+
             # Otherwise continue counting the rest
             for line in fh:
                 if line.strip():
                     count += 1
-    
+
     return count
 
 
 def _count_csv_rows(path: str, encoding: str, limit: int) -> int:
     """
     Counts data rows (excludes header).
-    
+
     Supports both local paths and cloud URLs (Azure ADLS Gen2).
     """
     # Just reuse line counter but subtract 1 for header
     total = _count_lines(path, encoding, limit)
     return max(0, total - 1)  # Ensure we don't return negative count
+
+
+# ---------------------------------------------------------------------------
+#  XLSX schema inference  ----------------------------------------------------
+# ---------------------------------------------------------------------------
+
+
+def _infer_xlsx_schema(filepath: str) -> dict:
+    """Infer schema from an Excel spreadsheet via converter.read()."""
+    from omni_morph.data import converter as _converter  # local import to avoid cycles
+
+    tbl = _converter.read(filepath, fmt=Format.XLSX)
+    return {
+        "fields": [
+            {"name": f.name, "type": str(f.type), "nullable": f.nullable}
+            for f in tbl.schema
+        ]
+    }

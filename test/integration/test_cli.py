@@ -34,7 +34,9 @@ def run_cli(args, expected_exit_code=0, check=True):
         return result
     except subprocess.CalledProcessError as e:
         if expected_exit_code == 0:
-            pytest.fail(f"Command {cmd} failed with exit code {e.returncode}\nStdout: {e.stdout}\nStderr: {e.stderr}")
+            pytest.fail(
+                f"Command {cmd} failed with exit code {e.returncode}\nStdout: {e.stdout}\nStderr: {e.stderr}"
+            )
         assert e.returncode == expected_exit_code
         return e
 
@@ -68,16 +70,18 @@ def test_head(file_path):
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 20  # Default is 20 records
-    
+
     # Verify the output contains valid data
-    assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
+    assert all("{" in line for line in lines), (
+        "Output should contain JSON-formatted records"
+    )
 
     # Test with custom number of records
     result = run_cli(["head", str(file_path), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
-    
+
     # Test with non-existent file
     result = run_cli(["head", "nonexistent.csv"], expected_exit_code=1, check=False)
     assert result.returncode == 1
@@ -93,16 +97,18 @@ def test_tail(file_path):
     # Count the number of lines in the output
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 20  # Default is 20 records
-    
+
     # Verify the output contains valid data
-    assert all('{' in line for line in lines), "Output should contain JSON-formatted records"
+    assert all("{" in line for line in lines), (
+        "Output should contain JSON-formatted records"
+    )
 
     # Test with custom number of records
     result = run_cli(["tail", str(file_path), "-n", "5"])
     assert result.returncode == 0
     lines = result.stdout.strip().split("\n")
     assert len(lines) <= 5
-    
+
     # Test with non-existent file
     result = run_cli(["tail", "nonexistent.csv"], expected_exit_code=1, check=False)
     assert result.returncode == 1
@@ -120,23 +126,25 @@ def test_conversion_commands():
             f.write("id,name,value\n")
             f.write("1,test1,100\n")
             f.write("2,test2,200\n")
-        
+
         # Test to-json command
         json_output = Path(tmpdir) / "output.json"
         result = run_cli(["to-json", str(simple_csv), str(json_output)], check=False)
         # We don't assert success, just verify the command is recognized
         assert result.returncode in (0, 1)
-        
+
         # Test to-csv command
         csv_output = Path(tmpdir) / "output.csv"
         result = run_cli(["to-csv", str(JSON_FILE), str(csv_output)], check=False)
         assert result.returncode in (0, 1)
-        
+
         # Test to-parquet command
         parquet_output = Path(tmpdir) / "output.parquet"
-        result = run_cli(["to-parquet", str(simple_csv), str(parquet_output)], check=False)
+        result = run_cli(
+            ["to-parquet", str(simple_csv), str(parquet_output)], check=False
+        )
         assert result.returncode in (0, 1)
-        
+
         # Test to-avro command
         avro_output = Path(tmpdir) / "output.avro"
         result = run_cli(["to-avro", str(simple_csv), str(avro_output)], check=False)
@@ -151,8 +159,16 @@ def test_meta(file_path):
     assert result.returncode == 0
     stdout = result.stdout.strip()
     data = json.loads(stdout)
-    for key in ("file_size", "created", "modified", "encoding", "num_records", "format"):
+    for key in (
+        "file_size",
+        "created",
+        "modified",
+        "encoding",
+        "num_records",
+        "format",
+    ):
         assert key in data
+
 
 @pytest.mark.parametrize("file_path", [CSV_FILE, PARQUET_FILE, AVRO_FILE, JSON_FILE])
 def test_schema(file_path):
@@ -162,11 +178,12 @@ def test_schema(file_path):
     data = json.loads(result.stdout)
     assert isinstance(data, dict) and data, "Schema output should be a non-empty dict"
 
+
 def test_stats():
     """Test the stats command."""
     result = run_cli(["stats", str(CSV_FILE)])
     assert result.returncode == 0
-    
+
     # Verify the output is valid JSON
     try:
         stats_data = json.loads(result.stdout)
@@ -182,13 +199,15 @@ def test_stats_markdown():
     """Test the stats command with markdown output."""
     result = run_cli(["stats", str(CSV_FILE), "--markdown"])
     assert result.returncode == 0
-    
+
     # Verify the output contains markdown formatting
     output = result.stdout
-    assert "# Numeric columns" in output, "Markdown output should contain section headers"
+    assert "# Numeric columns" in output, (
+        "Markdown output should contain section headers"
+    )
     assert "|" in output, "Markdown output should contain table formatting"
     assert "column" in output, "Markdown output should contain column headers"
-    
+
     # Make sure it's not JSON
     try:
         json.loads(output)
@@ -202,13 +221,15 @@ def test_stats_fast():
     """Test the stats command with the --fast option."""
     result = run_cli(["stats", str(CSV_FILE), "--fast"])
     assert result.returncode == 0
-    
+
     # The fast option should output markdown format by default
     output = result.stdout
-    assert "# Numeric columns" in output, "Fast stats output should contain section headers"
+    assert "# Numeric columns" in output, (
+        "Fast stats output should contain section headers"
+    )
     assert "|" in output, "Fast stats output should contain table formatting"
     assert "column" in output, "Fast stats output should contain column headers"
-    
+
     # Make sure it's not JSON
     try:
         json.loads(output)
@@ -225,11 +246,13 @@ def test_stats_fast_all_formats(file_path):
     # We don't assert success for all formats as some might not be supported by DuckDB
     # Just verify the command is recognized
     assert result.returncode in (0, 1)
-    
+
     if result.returncode == 0:
         # If successful, verify the output contains markdown formatting
         output = result.stdout
-        assert "# Numeric columns" in output, "Fast stats output should contain section headers"
+        assert "# Numeric columns" in output, (
+            "Fast stats output should contain section headers"
+        )
         assert "|" in output, "Fast stats output should contain table formatting"
 
 
@@ -242,38 +265,40 @@ def test_merge():
             f.write("id,name,value\n")
             f.write("1,test1,100\n")
             f.write("2,test2,200\n")
-        
+
         simple_csv2 = Path(tmpdir) / "simple2.csv"
         with open(simple_csv2, "w") as f:
             f.write("id,name,value\n")
             f.write("3,test3,300\n")
             f.write("4,test4,400\n")
-        
+
         # Test merging CSV files to CSV
         csv_output = Path(tmpdir) / "merged.csv"
         result = run_cli(["merge", str(simple_csv1), str(simple_csv2), str(csv_output)])
         assert result.returncode == 0
         assert "Files merged successfully" in result.stdout
-        
+
         # Verify the merged file exists and has the correct content
         assert csv_output.exists()
         with open(csv_output, "r") as f:
             content = f.read()
             # Check if it contains data from both files (should have 4 data rows + header)
             assert content.count("\n") >= 4
-        
+
         # Test merging to different output formats
         parquet_output = Path(tmpdir) / "merged.parquet"
-        result = run_cli(["merge", str(simple_csv1), str(simple_csv2), str(parquet_output)])
+        result = run_cli(
+            ["merge", str(simple_csv1), str(simple_csv2), str(parquet_output)]
+        )
         assert result.returncode == 0
         assert parquet_output.exists()
-        
+
         # Test error handling with non-existent files
         nonexistent = Path(tmpdir) / "nonexistent.csv"
         result = run_cli(
             ["merge", str(nonexistent), str(simple_csv1), str(csv_output)],
             expected_exit_code=1,
-            check=False
+            check=False,
         )
         assert "Error merging files" in result.stderr
 
@@ -283,22 +308,22 @@ def test_random_sample(file_path):
     """Test the random-sample command for all formats."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / "sample.csv"
-        
+
         # Test with n parameter
         result = run_cli(
             ["random-sample", str(file_path), str(output_path), "--n", "10"],
-            check=False
+            check=False,
         )
         assert result.returncode == 0, f"Command failed with error: {result.stderr}"
         # Verify the output file exists and has content
         assert output_path.exists(), "Output file was not created"
         assert output_path.stat().st_size > 0, "Output file is empty"
-        
+
         # Test with fraction parameter
         output_path2 = Path(tmpdir) / "sample_fraction.csv"
         result = run_cli(
             ["random-sample", str(file_path), str(output_path2), "--fraction", "0.1"],
-            check=False
+            check=False,
         )
         assert result.returncode == 0, f"Command failed with error: {result.stderr}"
         assert output_path2.exists(), "Output file was not created"
@@ -312,10 +337,11 @@ def test_random_sample_invalid_params():
         result = run_cli(
             ["random-sample", str(CSV_FILE), str(output_path)],
             expected_exit_code=1,
-            check=False
+            check=False,
         )
         assert result.returncode == 1
         assert "Error:" in result.stderr
+
 
 def test_random_sample_nonexistent_file():
     """Test random-sample with non-existent input file fails."""
@@ -324,41 +350,58 @@ def test_random_sample_nonexistent_file():
         result = run_cli(
             ["random-sample", "nonexistent.csv", str(output_path)],
             expected_exit_code=1,
-            check=False
+            check=False,
         )
         assert result.returncode == 1
         assert "Error:" in result.stderr
 
+
 def test_query():
     """Test the query command with a simple SQL query."""
     # Test a simple SELECT query
-    result = run_cli(["query", str(CSV_FILE), "SELECT id, first_name, last_name FROM userdata1 LIMIT 5"])
+    result = run_cli(
+        [
+            "query",
+            str(CSV_FILE),
+            "SELECT id, first_name, last_name FROM userdata1 LIMIT 5",
+        ]
+    )
     assert result.returncode == 0
-    
+
     # Verify the output contains a markdown table
     output = result.stdout
     assert "|" in output, "Output should contain markdown table formatting"
     assert "id" in output, "Output should contain column headers"
     assert "first_name" in output, "Output should contain column headers"
     assert "last_name" in output, "Output should contain column headers"
-    
+
     # Test with a more complex query (aggregation)
-    result = run_cli(["query", str(CSV_FILE), "SELECT gender, COUNT(*) as count, AVG(salary) as avg_salary FROM userdata1 GROUP BY gender"])
+    result = run_cli(
+        [
+            "query",
+            str(CSV_FILE),
+            "SELECT gender, COUNT(*) as count, AVG(salary) as avg_salary FROM userdata1 GROUP BY gender",
+        ]
+    )
     assert result.returncode == 0
-    
+
     # Verify the output contains expected columns
     output = result.stdout
     assert "gender" in output, "Output should contain gender column"
     assert "count" in output, "Output should contain count column"
     assert "avg_salary" in output, "Output should contain avg_salary column"
-    
+
     # Test with an invalid SQL query
     result = run_cli(["query", str(CSV_FILE), "SELECT * FROM nonexistent_table"])
     assert result.returncode == 0  # Command succeeds but shows validation error
     assert "SQL validation failed" in result.stdout
     assert "nonexistent_table" in result.stdout
-    
+
     # Test with a non-existent file
-    result = run_cli(["query", "nonexistent.csv", "SELECT * FROM nonexistent"], expected_exit_code=1, check=False)
+    result = run_cli(
+        ["query", "nonexistent.csv", "SELECT * FROM nonexistent"],
+        expected_exit_code=1,
+        check=False,
+    )
     assert result.returncode == 1
     assert "Error" in result.stderr

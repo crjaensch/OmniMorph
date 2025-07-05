@@ -1,17 +1,15 @@
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union, Dict, List, Tuple, BinaryIO, TextIO
+from typing import Optional, Union, Dict, List, Tuple
 import math
-import os
 import io
 
 import pandas as pd
 import pyarrow as pa
-import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from fastdigest import TDigest              # Required dependency
+from fastdigest import TDigest  # Required dependency
 
 try:
     from fastavro import reader as avro_reader  # pip install fastavro
@@ -22,21 +20,20 @@ from omni_morph.data.exceptions import ExtractError
 from omni_morph.data.formats import Format
 from omni_morph.data.filesystems import FileSystemHandler
 
-__all__ = [
-    "get_stats"
-]
+__all__ = ["get_stats"]
 # ---------------------------------------------------------------------------
 #  Compute data field statistics
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _NumAgg:
     count: int = 0
     mean: float = 0.0
-    M2:   float = 0.0         # variance accumulator (not exposed yet)
+    M2: float = 0.0  # variance accumulator (not exposed yet)
     minv: Union[float, None] = None
     maxv: Union[float, None] = None
-    td:   Union[TDigest, None] = None
+    td: Union[TDigest, None] = None
 
     def update(self, arr):
         for v in arr:
@@ -46,9 +43,9 @@ class _NumAgg:
             self.count += 1
             delta = v - self.mean
             self.mean += delta / self.count
-            self.M2   += delta * (v - self.mean)
-            self.minv  = v if self.minv is None else min(self.minv, v)
-            self.maxv  = v if self.maxv is None else max(self.maxv, v)
+            self.M2 += delta * (v - self.mean)
+            self.minv = v if self.minv is None else min(self.minv, v)
+            self.maxv = v if self.maxv is None else max(self.maxv, v)
             if self.td is not None:
                 self.td.update(v)
 
@@ -61,24 +58,26 @@ class _NumAgg:
             except AttributeError:
                 median = self.td.quantile(0.5)
         return {
-            "count":   self.count,
-            "min":     self.minv,
-            "max":     self.maxv,
-            "mean":    self.mean if self.count else None,
-            "median":  median,
+            "count": self.count,
+            "min": self.minv,
+            "max": self.maxv,
+            "mean": self.mean if self.count else None,
+            "median": median,
         }
+
 
 @dataclass
 class _CatAgg:
     counter: Counter = field(default_factory=Counter)
-    hll:     object  = None
-    max_card: int    = 100_000     # switch to HLL if too many uniques
+    hll: object = None
+    max_card: int = 100_000  # switch to HLL if too many uniques
 
     def update(self, arr):
         self.counter.update(("__NULL__" if v in (None, "") else v) for v in arr)
         if len(self.counter) > self.max_card and self.hll is None:
             try:
                 from datasketch.hyperloglog import HyperLogLog
+
                 self.hll = HyperLogLog()
                 self.hll.update(b"seed")  # warm-up
                 for k in self.counter:
@@ -91,33 +90,35 @@ class _CatAgg:
                 self.hll.update(str(v).encode())
 
     def finish(self):
-        distinct = (self.hll.count()
-                    if self.hll is not None
-                    else len(self.counter))
+        distinct = self.hll.count() if self.hll is not None else len(self.counter)
         top5 = self.counter.most_common(5)
-        return {"distinct": distinct,
-                "top5": [{"value": v, "count": c} for v, c in top5]}
+        return {
+            "distinct": distinct,
+            "top5": [{"value": v, "count": c} for v, c in top5],
+        }
+
 
 # ---------------------------------------------------------------------------
 #  Compute data field statistics
 # ---------------------------------------------------------------------------
+
 
 def get_stats(
     path: Union[str, Path],
     *,
     fmt: Optional[Format] = None,
     columns: Optional[List[str]] = None,
-    sample_size: int = 2048,                    # t-digest reservoir per column
+    sample_size: int = 2048,  # t-digest reservoir per column
     small_file_threshold: int = 100 * 1024 * 1024,
 ) -> Dict[str, Dict]:
     """Compute per-column statistics for a data file.
-    
+
     This function analyzes a data file and computes statistics for each column.
     For numeric columns, it calculates min, max, mean, and approximate median (using TDigest).
     For categorical columns, it counts distinct values and identifies the top 5 categories.
-    
+
     Large files are processed by streaming, while small files use Arrow compute kernels directly.
-    
+
     Args:
         path: A string or Path object pointing to the data file to analyze.
         fmt: Optional format specification. If None, the format is inferred
@@ -128,11 +129,11 @@ def get_stats(
                     Set to 0 to disable median approximation.
         small_file_threshold: File size threshold in bytes below which the file
                              is loaded entirely into memory.
-    
+
     Returns:
         A dictionary mapping column names to their statistics. Each column's statistics
         include the type ('numeric' or 'categorical') and type-specific metrics.
-    
+
     Raises:
         ExtractError: If the format is unsupported or cannot be processed.
         ImportError: If a required dependency is missing for a specific format.
@@ -141,30 +142,32 @@ def get_stats(
     path_str = str(path)
 
     resolved_fmt = fmt or Format.from_path(path_str)
-    
+
     # Get file size using FileSystemHandler
     file_info = FileSystemHandler.get_file_info(path_str)
-    size = file_info.get('size', 0)
+    size = file_info.get("size", 0)
 
     if resolved_fmt == Format.PARQUET:
-        return _stats_parquet(path_str, columns, size, sample_size, small_file_threshold)
+        return _stats_parquet(
+            path_str, columns, size, sample_size, small_file_threshold
+        )
     elif resolved_fmt == Format.AVRO:
         return _stats_avro(path_str, columns, sample_size, small_file_threshold)
     elif resolved_fmt == Format.CSV:
         return _stats_csv(path_str, columns, sample_size, small_file_threshold)
     elif resolved_fmt == Format.JSON:
         return _stats_jsonl(path_str, columns, sample_size, small_file_threshold)
+    elif resolved_fmt == Format.XLSX:
+        return _stats_xlsx(path_str, columns, sample_size, small_file_threshold)
     else:
         raise ExtractError(f"Unsupported format {resolved_fmt!r}")
 
+
 # ---------- Parquet --------------------------------------------------------
 
+
 def _stats_parquet(
-    path: str,
-    cols: Optional[List[str]],
-    size: int,
-    sample_size: int,
-    limit: int
+    path: str, cols: Optional[List[str]], size: int, sample_size: int, limit: int
 ) -> Dict[str, Dict]:
     # Use FileSystemHandler to handle both local and Azure paths
     fs, fs_path = FileSystemHandler.get_fs_and_path(path)
@@ -185,13 +188,12 @@ def _stats_parquet(
 
     return _finish_aggs(num_aggs, cat_aggs)
 
+
 # ---------- Avro -----------------------------------------------------------
 
+
 def _stats_avro(
-    path: str,
-    cols: Optional[List[str]],
-    sample_size: int,
-    limit: int
+    path: str, cols: Optional[List[str]], sample_size: int, limit: int
 ) -> Dict[str, Dict]:
     if avro_reader is None:
         raise ImportError("fastavro missing (`pip install fastavro`).")
@@ -203,39 +205,38 @@ def _stats_avro(
             _update_aggs_from_dict(rec, num_aggs, cat_aggs, cols, sample_size)
     return _finish_aggs(num_aggs, cat_aggs)
 
+
 # ---------- CSV & JSONL ----------------------------------------------------
 
+
 def _stats_csv(
-    path: str,
-    cols: Optional[List[str]],
-    sample_size: int,
-    limit: int
+    path: str, cols: Optional[List[str]], sample_size: int, limit: int
 ) -> Dict[str, Dict]:
     try:
         # Use FileSystemHandler to handle both local and Azure paths
         fs, fs_path = FileSystemHandler.get_fs_and_path(path)
-        
+
         # If no columns specified, read the header row first to get all column names
         if cols is None:
             # Open the file using FileSystemHandler
-            with FileSystemHandler.open_file(path, 'r', encoding='utf8') as f:
+            with FileSystemHandler.open_file(path, "r", encoding="utf8") as f:
                 # Create a pandas-compatible file-like object if needed
-                if not hasattr(f, 'read') or not callable(f.read):
+                if not hasattr(f, "read") or not callable(f.read):
                     f = io.StringIO(f.read())
                 # Read just the header to get column names
                 df_header = pd.read_csv(f, nrows=0)
                 cols = df_header.columns.tolist()
-        
+
         # For chunked reading, we need to create a generator that uses FileSystemHandler
         def read_chunks():
-            with FileSystemHandler.open_file(path, 'r', encoding='utf8') as f:
+            with FileSystemHandler.open_file(path, "r", encoding="utf8") as f:
                 # Create a pandas-compatible file-like object if needed
-                if not hasattr(f, 'read') or not callable(f.read):
+                if not hasattr(f, "read") or not callable(f.read):
                     f = io.StringIO(f.read())
                 # Use pandas to read in chunks
                 for chunk in pd.read_csv(f, chunksize=1_000_000):
                     yield chunk
-                    
+
         return _stats_from_chunks(read_chunks(), cols, sample_size)
     except FileNotFoundError:
         raise ExtractError(f"CSV file not found: {path}")
@@ -248,14 +249,12 @@ def _stats_csv(
     except Exception as e:
         raise ExtractError(f"Error processing CSV file {path}: {e}") from e
 
+
 def _stats_jsonl(
-    path: str,
-    cols: Optional[List[str]],
-    sample_size: int,
-    limit: int
+    path: str, cols: Optional[List[str]], sample_size: int, limit: int
 ) -> Dict[str, Dict]:
     import json
-    
+
     try:
         # If no columns specified, read the first record to get all keys
         if cols is None:
@@ -270,7 +269,7 @@ def _stats_jsonl(
                         except json.JSONDecodeError:
                             # We'll handle this in the main loop
                             pass
-        
+
         def chunks():
             with FileSystemHandler.open_file(path, "r", encoding="utf8") as fh:
                 batch = []
@@ -281,12 +280,15 @@ def _stats_jsonl(
                         try:
                             batch.append(json.loads(line))
                         except json.JSONDecodeError:
-                            raise ExtractError(f"Invalid JSON at line {line_num} in {path}")
+                            raise ExtractError(
+                                f"Invalid JSON at line {line_num} in {path}"
+                            )
                     if len(batch) == 1_000_000:
                         yield batch
                         batch = []
                 if batch:
                     yield batch
+
         return _stats_from_chunks(chunks(), cols, sample_size)
     except FileNotFoundError:
         raise ExtractError(f"JSONL file not found: {path}")
@@ -299,11 +301,41 @@ def _stats_jsonl(
             raise
         raise ExtractError(f"Error processing JSONL file {path}: {e}") from e
 
+
+# ---------- XLSX -----------------------------------------------------------
+
+
+def _stats_xlsx(
+    path: str,
+    cols: Optional[List[str]],
+    sample_size: int,
+    limit: int,
+) -> Dict[str, Dict]:
+    """Compute statistics for Excel files by loading into Arrow.
+
+    Excel sheets must be fully materialised; for files approaching the 1M row
+    limit this still fits in memory on modern machines (\u2264 ~1 GB). If this
+    becomes a concern, callers should raise the ``small_file_threshold``.
+    """
+    from omni_morph.data import converter as _converter  # local import to avoid cycles
+
+    tbl = _converter.read(path, fmt=Format.XLSX)
+
+    # Determine columns if not provided
+    if cols is None:
+        cols = [f.name for f in tbl.schema]
+
+    num_aggs, cat_aggs = _prep_aggs(tbl.schema, cols, sample_size)
+    _update_aggs_from_table(tbl, num_aggs, cat_aggs)
+    return _finish_aggs(num_aggs, cat_aggs)
+
+
 # ---------- shared helpers -------------------------------------------------
+
 
 def _create_tdigest():
     """Create a TDigest object with proper error handling.
-    
+
     Returns:
         A TDigest object if creation succeeds, otherwise None.
     """
@@ -311,24 +343,26 @@ def _create_tdigest():
         return TDigest()
     except Exception as e:
         import warnings
-        warnings.warn(f"Failed to initialize TDigest: {e}. Median approximation will be disabled.")
+
+        warnings.warn(
+            f"Failed to initialize TDigest: {e}. Median approximation will be disabled."
+        )
         return None
 
+
 def _stats_from_chunks(
-    chunks: Union[pd.DataFrame, List[Dict]],
-    cols: Optional[List[str]],
-    sample_size: int
+    chunks: Union[pd.DataFrame, List[Dict]], cols: Optional[List[str]], sample_size: int
 ) -> Dict[str, Dict]:
     num_aggs, cat_aggs = {}, {}
     first_chunk = True
-    
+
     for chunk in chunks:
-        if isinstance(chunk, list):     # JSONL list-of-dicts
+        if isinstance(chunk, list):  # JSONL list-of-dicts
             for rec in chunk:
                 _update_aggs_from_dict(rec, num_aggs, cat_aggs, cols, sample_size)
-        else:                           # pandas DataFrame
+        else:  # pandas DataFrame
             tbl = pa.Table.from_pandas(chunk, preserve_index=False)
-            
+
             # Initialize aggregators on first chunk
             if first_chunk:
                 # If cols is None, use all columns from the DataFrame
@@ -340,37 +374,45 @@ def _stats_from_chunks(
                 num_aggs.update(num_aggs_new)
                 cat_aggs.update(cat_aggs_new)
                 first_chunk = False
-                
+
             _update_aggs_from_table(tbl, num_aggs, cat_aggs)
     return _finish_aggs(num_aggs, cat_aggs)
+
 
 def _is_numeric_type(field_type):
     """Check if a PyArrow type is numeric in a version-compatible way."""
     try:
         # Try the newer API first
-        if hasattr(pa.types, 'is_numeric'):
+        if hasattr(pa.types, "is_numeric"):
             return pa.types.is_numeric(field_type)
         # Fall back to manual type checking for older PyArrow versions
         numeric_types = (
-            pa.int8(), pa.int16(), pa.int32(), pa.int64(),
-            pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(),
-            pa.float16(), pa.float32(), pa.float64()
+            pa.int8(),
+            pa.int16(),
+            pa.int32(),
+            pa.int64(),
+            pa.uint8(),
+            pa.uint16(),
+            pa.uint32(),
+            pa.uint64(),
+            pa.float16(),
+            pa.float32(),
+            pa.float64(),
         )
         return any(field_type == t for t in numeric_types)
     except Exception:
         # If all else fails, use string type name check
         type_name = str(field_type).lower()
-        return any(name in type_name for name in ('int', 'float', 'double', 'decimal'))
+        return any(name in type_name for name in ("int", "float", "double", "decimal"))
+
 
 def _prep_aggs(
-    schema: pa.Schema,
-    cols: List[str],
-    sample_size: int
+    schema: pa.Schema, cols: List[str], sample_size: int
 ) -> Tuple[Dict[str, _NumAgg], Dict[str, _CatAgg]]:
     num_aggs, cat_aggs = {}, {}
     for name in cols:
         field = schema.field(name) if hasattr(schema, "field") else None
-        is_num = (field and _is_numeric_type(field.type))
+        is_num = field and _is_numeric_type(field.type)
         if is_num:
             td = _create_tdigest() if sample_size > 0 else None
             num_aggs[name] = _NumAgg(td=td)
@@ -378,10 +420,9 @@ def _prep_aggs(
             cat_aggs[name] = _CatAgg()
     return num_aggs, cat_aggs
 
+
 def _update_aggs_from_table(
-    tbl: pa.Table,
-    num_aggs: Dict[str, _NumAgg],
-    cat_aggs: Dict[str, _CatAgg]
+    tbl: pa.Table, num_aggs: Dict[str, _NumAgg], cat_aggs: Dict[str, _CatAgg]
 ) -> None:
     for name, agg in num_aggs.items():
         arr = tbl[name].to_pylist()
@@ -390,26 +431,29 @@ def _update_aggs_from_table(
         arr = tbl[name].to_pylist()
         agg.update(arr)
 
+
 def _update_aggs_from_dict(
     rec: Dict,
     num_aggs: Dict[str, _NumAgg],
     cat_aggs: Dict[str, _CatAgg],
     cols: Optional[List[str]],
-    sample_size: int
+    sample_size: int,
 ) -> None:
     for k, v in rec.items():
         if cols and k not in cols:
             continue
         if isinstance(v, (int, float)) or v is None:
-            agg = num_aggs.setdefault(k, _NumAgg(td=_create_tdigest() if sample_size > 0 else None))
+            agg = num_aggs.setdefault(
+                k, _NumAgg(td=_create_tdigest() if sample_size > 0 else None)
+            )
             agg.update([v])
         else:
             agg = cat_aggs.setdefault(k, _CatAgg())
             agg.update([v])
 
+
 def _finish_aggs(
-    num_aggs: Dict[str, _NumAgg],
-    cat_aggs: Dict[str, _CatAgg]
+    num_aggs: Dict[str, _NumAgg], cat_aggs: Dict[str, _CatAgg]
 ) -> Dict[str, Dict]:
     out = {}
     for k, agg in num_aggs.items():

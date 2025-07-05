@@ -20,6 +20,7 @@ Want more in-depth information about OmniMorph? Visit [![Ask DeepWiki](https://d
 - [Features](#features)
   - [Performance Optimizations](#performance-optimizations)
   - [Statistical Analysis](#statistical-analysis)
+  - [Excel (XLSX) Support](#excel-xlsx-support)
   - [SQL Queries with DuckDB](#sql-queries-with-duckdb)
   - [AI-Powered SQL Assistance](#ai-powered-sql-assistance)
   - [Large File Processing](#large-file-processing)
@@ -80,7 +81,10 @@ poetry run omo-cli --help
 # View the schema of a CSV file
 poetry run omo-cli schema data.csv
 
-# Convert from one format to another
+# Convert CSV to Excel
+poetry run omo-cli to-excel data.csv output.xlsx
+
+# Convert to JSON
 poetry run omo-cli to-json data.csv output.json
 
 # Run SQL queries against data files
@@ -122,6 +126,7 @@ Commands:
   random-sample  Randomly sample records from a file.
   to-avro        Convert one file to Avro format.
   to-csv         Convert one file to CSV format.
+  to-excel       Convert one file to Excel format.
   to-json        Convert one file to JSON format.
   to-parquet     Convert one file to Parquet format.
   merge          Merge multiple files of the same or different formats...
@@ -224,6 +229,7 @@ query
 random-sample
 to-avro
 to-csv
+to-excel
 to-json
 to-parquet
 merge
@@ -285,6 +291,20 @@ poetry run omo-cli stats --fast large_data.parquet
 ```
 
 The fast option provides similar statistics but processes data much more efficiently. Note that when using `--fast`, only the `--format` option is compatible; other options like `--columns` and `--sample-size` cannot be used.
+
+### Excel (XLSX) Support
+
+OmniMorph now reads **and writes** Microsoft Excel workbooks:
+
+```bash
+# View schema
+poetry run omo-cli schema data.xlsx
+
+# Randomly sample 100 rows and write back to Excel
+poetry run omo-cli random-sample data.xlsx --n 100 sample.xlsx
+```
+
+Under the hood OmniMorph uses `pandas` + `openpyxl` to convert sheets to Arrow tables, so downstream commands (`stats`, `query`, etc.) work exactly like with CSV or Parquet.
 
 ### SQL Queries with DuckDB
 
@@ -396,6 +416,7 @@ OmniMorph provides robust schema inference for all supported file formats:
 - **JSON**: Uses GenSON to generate JSON Schema
 - **Avro**: Extracts embedded schema
 - **Parquet**: Extracts embedded schema
+- **Excel**: Via openpyxl engine for .xlsx files
 
 ## Python API
 
@@ -547,6 +568,7 @@ if error:
 - **JSON** (.json)
 - **Avro** (.avro)
 - **Parquet** (.parquet)
+- **Excel** (.xlsx)
 
 ## Alpha Features
 

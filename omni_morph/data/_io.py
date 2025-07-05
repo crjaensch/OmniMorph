@@ -1,18 +1,18 @@
 """
 Internal I/O helpers - kept separate so the public package namespace stays tidy.
 """
+
 from __future__ import annotations
 
-import io
 import json
+import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Union
 
 import pyarrow as pa
 import pyarrow.csv as pacsv
 import pyarrow.json as pajson
 import pyarrow.parquet as papq
-import fsspec
 
 import pandas as pd
 
@@ -21,9 +21,11 @@ from .filesystems import FileSystemHandler
 # Try to import fastavro for Avro support
 try:
     import fastavro
+
     HAS_FASTAVRO = True
 except ImportError:
     HAS_FASTAVRO = False
+
     # Define a placeholder that will raise a more helpful error when used
     class FastavroNotAvailable:
         @staticmethod
@@ -32,24 +34,25 @@ except ImportError:
                 "Fastavro is not available. "
                 "Please install fastavro to support Avro format."
             )
-        
+
         @staticmethod
         def write_avro(*args, **kwargs):
             raise ImportError(
                 "Fastavro is not available. "
                 "Please install fastavro to support Avro format."
             )
-    
+
     fastavro = FastavroNotAvailable()
 
 from .formats import Format
+
 
 # --------------------------------------------------------------------------- #
 # Readers
 # --------------------------------------------------------------------------- #
 def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> pa.Table:
     """Read a file into a PyArrow Table.
-    
+
     Args:
         path: Path to the file to read
         fmt: Format of the file
@@ -58,29 +61,31 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
             - For Parquet: memory_map, use_dataset, columns, filters, use_threads
             - For CSV: block_size, column_types, include_columns
             - For JSON: block_size, column_types
-    
-    Returns:
-        PyArrow Table containing the data from the file
+            - For XLSX: sheet_name
     """
     # Cache file stats to avoid multiple syscalls
     file_empty = False
     try:
         # Use FileSystemHandler to get file info (works with both local and Azure paths)
         file_info = FileSystemHandler.get_file_info(str(path))
-        file_empty = file_info.get('size', 0) == 0
+        file_empty = file_info.get("size", 0) == 0
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {path}")
-    
+
     # Extract common parameters that might not be supported by all formats
-    use_threads = kwargs.pop('use_threads', True)  # Default to True but don't pass to all formats
-    use_dataset = kwargs.pop('use_dataset', False)
-    columns = kwargs.pop('columns', None)
-    filters = kwargs.pop('filters', None)
-    
+    use_threads = kwargs.pop(
+        "use_threads", True
+    )  # Default to True but don't pass to all formats
+    use_dataset = kwargs.pop("use_dataset", False)
+    columns = kwargs.pop("columns", None)
+    filters = kwargs.pop("filters", None)
+
     if fmt is Format.AVRO:
         if not HAS_FASTAVRO:
-            raise ImportError("Fastavro is not available. Please install fastavro to support Avro format.")
-        
+            raise ImportError(
+                "Fastavro is not available. Please install fastavro to support Avro format."
+            )
+
         # Refactored Avro reading for robust null handling
         return _read_avro(path, schema=schema, **kwargs)
 
@@ -90,41 +95,43 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
             # Create empty typed arrays based on schema
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return pa.Table.from_arrays(empty_arrays, schema=schema)
-        
+
         # For Parquet, we can use all the parameters
         parquet_kwargs = kwargs.copy()
-        
+
         # Add back the parameters that Parquet supports
-        parquet_kwargs['memory_map'] = kwargs.get('memory_map', True)  # Enable memory mapping by default
-        
+        parquet_kwargs["memory_map"] = kwargs.get(
+            "memory_map", True
+        )  # Enable memory mapping by default
+
         if use_dataset:
             # Use dataset API for better performance with column projection and predicate push-down
             import pyarrow.dataset as ds
-            
+
             dataset = ds.dataset(path, format="parquet")
             scanner_kwargs = {}
-            
+
             # Add supported parameters
             if columns is not None:
-                scanner_kwargs['columns'] = columns
+                scanner_kwargs["columns"] = columns
             if filters is not None:
-                scanner_kwargs['filter'] = filters
+                scanner_kwargs["filter"] = filters
             if use_threads is not None:
-                scanner_kwargs['use_threads'] = use_threads
-                
+                scanner_kwargs["use_threads"] = use_threads
+
             # Add any remaining kwargs
             scanner_kwargs.update(parquet_kwargs)
-            
+
             scanner = dataset.scanner(**scanner_kwargs)
             return scanner.to_table()
         else:
             # Use standard read_table with memory mapping
             if use_threads is not None:
-                parquet_kwargs['use_threads'] = use_threads
+                parquet_kwargs["use_threads"] = use_threads
             if columns is not None:
-                parquet_kwargs['columns'] = columns
+                parquet_kwargs["columns"] = columns
             return papq.read_table(path, **parquet_kwargs)
-    
+
     elif fmt is Format.JSON:
         # Handle empty file case
         if file_empty:
@@ -134,20 +141,20 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
                 return pa.Table.from_arrays(empty_arrays, schema=schema)
             else:
                 return pa.Table.from_arrays([], names=[])
-        
+
         # Extract and set JSON-specific options
-        block_size = kwargs.pop('block_size', None)  # Default is ~32MB
-        
+        block_size = kwargs.pop("block_size", None)  # Default is ~32MB
+
         # Create read options with block size if specified
-        read_options = kwargs.get('read_options', None)
+        read_options = kwargs.get("read_options", None)
         if block_size is not None and read_options is None:
             read_options = pajson.ReadOptions(block_size=block_size)
-            kwargs['read_options'] = read_options
-        
+            kwargs["read_options"] = read_options
+
         # JSON doesn't support use_threads directly
         # Assume JSON Lines format
         return pajson.read_json(path, **kwargs)
-    
+
     elif fmt is Format.CSV:
         # Handle empty file case
         if file_empty:
@@ -156,51 +163,95 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
                 # Create empty typed arrays based on schema
                 empty_arrays = [pa.array([], type=field.type) for field in schema]
                 return pa.Table.from_arrays(empty_arrays, schema=schema)
-        
+
         # Extract and set CSV-specific options for better performance
-        block_size = kwargs.pop('block_size', 64 * 1024 * 1024)  # 64MB default for manageable chunks
-        column_types = kwargs.pop('column_types', None)  # For type inference optimization
-        include_columns = kwargs.pop('include_columns', None)  # For column projection
-        
+        block_size = kwargs.pop(
+            "block_size", 64 * 1024 * 1024
+        )  # 64MB default for manageable chunks
+        column_types = kwargs.pop(
+            "column_types", None
+        )  # For type inference optimization
+        include_columns = kwargs.pop("include_columns", None)  # For column projection
+
         # Create read options with optimized settings
-        read_options = kwargs.get('read_options', None)
+        read_options = kwargs.get("read_options", None)
         if read_options is None:
             read_options = pacsv.ReadOptions(
                 block_size=block_size,
-                use_threads=use_threads  # CSV reader supports use_threads
+                use_threads=use_threads,  # CSV reader supports use_threads
             )
-            kwargs['read_options'] = read_options
-        
+            kwargs["read_options"] = read_options
+
         # Create convert options with column types if provided
-        convert_options = kwargs.get('convert_options', None)
-        if convert_options is None and (column_types is not None or include_columns is not None):
+        convert_options = kwargs.get("convert_options", None)
+        if convert_options is None and (
+            column_types is not None or include_columns is not None
+        ):
             convert_options = pacsv.ConvertOptions(
-                column_types=column_types,
-                include_columns=include_columns
+                column_types=column_types, include_columns=include_columns
             )
-            kwargs['convert_options'] = convert_options
-        
+            kwargs["convert_options"] = convert_options
+
         return pacsv.read_csv(path, **kwargs)
-    
+
+    elif fmt is Format.XLSX:
+        # Read an Excel workbook via pandas and convert to PyArrow Table.
+        # pandas handles .xlsx through the openpyxl engine which we declared as
+        # a project dependency in Phase 0.
+
+        sheet_name = kwargs.pop("sheet_name", 0)  # default first sheet
+
+        # Pandas doesn't take `use_threads`; drop silently to keep API parity.
+        kwargs.pop("use_threads", None)
+
+        # pandas.read_excel supports `usecols`, but we received an already
+        # processed `columns` variable earlier. We'll sub-select after loading
+        # to avoid complex header inference issues.
+
+        df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl", **kwargs)
+
+        # Sub-select columns if requested.
+        if columns is not None:
+            df = df[columns]
+
+        # If the sheet is empty, honour provided schema or fallback to empty table.
+        if df.empty:
+            if schema is not None:
+                empty_arrays = [pa.array([], type=field.type) for field in schema]
+                return pa.Table.from_arrays(empty_arrays, schema=schema)
+            return pa.Table.from_arrays([], names=[])
+
+        for col in df.columns:
+            if isinstance(df[col].dtype, pd.DatetimeTZDtype):
+                df[col] = df[col].dt.tz_localize(None)
+
+        return pa.Table.from_pandas(df, preserve_index=False)
+
     else:
         raise AssertionError("unreachable")
 
 
-CHUNK_SIZE = 10000 # Default chunk size for reading large files
-def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZE, **kwargs) -> pa.Table:
+CHUNK_SIZE = 10000  # Default chunk size for reading large files
+
+
+def _read_avro(
+    path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZE, **kwargs
+) -> pa.Table:
     """Read an Avro file into a PyArrow Table, processing in chunks for memory efficiency.
-    
+
     This implementation uses direct conversion to PyArrow without Pandas intermediary.
     """
     if not HAS_FASTAVRO:
-        raise ImportError("Fastavro is not available. Please install fastavro to support Avro format.")
+        raise ImportError(
+            "Fastavro is not available. Please install fastavro to support Avro format."
+        )
 
     table_chunks = []
     avro_pa_schema = schema
 
     try:
         # Use FileSystemHandler to open file (works with both local and Azure paths)
-        with FileSystemHandler.open_file(str(path), 'rb') as fo:
+        with FileSystemHandler.open_file(str(path), "rb") as fo:
             # Get schema information first
             reader = fastavro.reader(fo)
             avro_schema_dict = reader.writer_schema
@@ -211,26 +262,32 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
                     avro_pa_schema = _avro_to_pyarrow_schema(avro_schema_dict)
                 except Exception as e:
                     # Log warning, proceed without specific schema
-                    print(f"Warning: Could not convert Avro schema to PyArrow schema: {e}")
+                    print(
+                        f"Warning: Could not convert Avro schema to PyArrow schema: {e}"
+                    )
                     avro_pa_schema = None  # Fallback
-            
+
             # Reset file for reading records
             fo.seek(0)
-            
+
             # Read records in chunks for memory efficiency
             records_chunk = []
             reader = fastavro.reader(fo)
-            
+
             for i, record in enumerate(reader):
                 records_chunk.append(record)
                 if (i + 1) % chunk_size == 0:
                     if records_chunk:
                         try:
                             # Convert directly from list of records to Arrow table without Pandas
-                            table_chunk = pa.Table.from_pylist(records_chunk, schema=avro_pa_schema)
+                            table_chunk = pa.Table.from_pylist(
+                                records_chunk, schema=avro_pa_schema
+                            )
                             table_chunks.append(table_chunk)
                         except pa.ArrowTypeError as e:
-                            print(f"Warning: Schema mismatch converting chunk to Arrow: {e}. Trying without explicit schema.")
+                            print(
+                                f"Warning: Schema mismatch converting chunk to Arrow: {e}. Trying without explicit schema."
+                            )
                             table_chunk = pa.Table.from_pylist(records_chunk)
                             table_chunks.append(table_chunk)
                         records_chunk = []  # Reset chunk
@@ -238,19 +295,27 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
             # Process the last partial chunk if any records remain
             if records_chunk:
                 try:
-                    table_chunk = pa.Table.from_pylist(records_chunk, schema=avro_pa_schema)
+                    table_chunk = pa.Table.from_pylist(
+                        records_chunk, schema=avro_pa_schema
+                    )
                     table_chunks.append(table_chunk)
                 except pa.ArrowTypeError as e:
-                    print(f"Warning: Schema mismatch converting chunk to Arrow: {e}. Trying without explicit schema.")
+                    print(
+                        f"Warning: Schema mismatch converting chunk to Arrow: {e}. Trying without explicit schema."
+                    )
                     table_chunk = pa.Table.from_pylist(records_chunk)
                     table_chunks.append(table_chunk)
 
-    except StopIteration:  # Handle case where fastavro.reader yields nothing for empty file
+    except (
+        StopIteration
+    ):  # Handle case where fastavro.reader yields nothing for empty file
         # If the file was empty from the start, ensure schema is handled
         if not table_chunks:
             schema_to_use = avro_pa_schema or schema
             if schema_to_use:
-                empty_arrays = [pa.array([], type=field.type) for field in schema_to_use]
+                empty_arrays = [
+                    pa.array([], type=field.type) for field in schema_to_use
+                ]
                 return pa.Table.from_arrays(empty_arrays, schema=schema_to_use)
             else:  # No schema available
                 return pa.Table.from_arrays([], names=[])  # Simplest empty table
@@ -264,9 +329,17 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
         else:  # No schema available
             return pa.Table.from_arrays([], names=[])  # Simplest empty table
 
-    # Concatenate all table chunks into the final table
-    # This pushes the work into the C++ layer
-    return pa.concat_tables(table_chunks, promote=True)
+    # Concatenate tables. PyArrow ≥21 deprecates the `promote` flag in favour of
+    # `promote_options`. To stay compatible across the supported range (18–20)
+    # while keeping tests warning-free, suppress the FutureWarning emitted by
+    # newer versions. This avoids a hard dependency on PyArrow ≥21 APIs.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*promote has been superseded.*",
+            category=FutureWarning,
+        )
+        return pa.concat_tables(table_chunks, promote=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -274,7 +347,7 @@ def _read_avro(path: Path, schema: pa.Schema = None, chunk_size: int = CHUNK_SIZ
 # --------------------------------------------------------------------------- #
 def _write_impl(table: pa.Table, path: Union[str, Path], fmt: Format, **kwargs) -> None:
     """Write a PyArrow Table to a file.
-    
+
     Args:
         table: The PyArrow Table to write
         path: Path to write the file to (local path or cloud URL)
@@ -286,36 +359,46 @@ def _write_impl(table: pa.Table, path: Union[str, Path], fmt: Format, **kwargs) 
     """
     # Convert Path to string if needed
     path_str = str(path) if isinstance(path, Path) else path
-    
+
     # Extract common parameters that might not be supported by all formats
-    use_threads = kwargs.pop('use_threads', True)  # Default to True but don't pass to all formats
-    compression = kwargs.pop('compression', None)
-    
+    _ = kwargs.pop(
+        "use_threads", True
+    )  # Default to True but not needed downstream
+    compression = kwargs.pop("compression", None)
+
     if fmt is Format.AVRO:
         if not HAS_FASTAVRO:
-            raise ImportError("Fastavro is not available. Please install fastavro to support Avro format.")
-        
+            raise ImportError(
+                "Fastavro is not available. Please install fastavro to support Avro format."
+            )
+
         # Optimize batch size based on table characteristics
         # For wide tables (many columns), use smaller batches
         # For narrow tables, use larger batches
-        optimal_batch_size = min(1 << 16, max(1000, 1000000 // max(1, len(table.schema))))
-        
+        optimal_batch_size = min(
+            1 << 16, max(1000, 1000000 // max(1, len(table.schema)))
+        )
+
         # Pre-identify columns that need conversion
         datetime_columns = set()
         string_columns = set()
         for field in table.schema:
-            if pa.types.is_timestamp(field.type) or pa.types.is_date(field.type) or pa.types.is_time(field.type):
+            if (
+                pa.types.is_timestamp(field.type)
+                or pa.types.is_date(field.type)
+                or pa.types.is_time(field.type)
+            ):
                 datetime_columns.add(field.name)
             elif pa.types.is_binary(field.type):
                 string_columns.add(field.name)
-        
+
         # Generate Avro schema directly from the table schema
         avro_schema_dict = {}
         for field in table.schema:
             field_type = _pyarrow_to_avro_type(field.type)
             if field.name not in avro_schema_dict:
                 avro_schema_dict[field.name] = field_type
-        
+
         # Create the full Avro schema
         avro_schema = {
             "type": "record",
@@ -323,89 +406,147 @@ def _write_impl(table: pa.Table, path: Union[str, Path], fmt: Format, **kwargs) 
             "fields": [
                 {"name": name, "type": type_def}
                 for name, type_def in avro_schema_dict.items()
-            ]
+            ],
         }
-        
+
         # Parse the schema for validation and optimization
         parsed_schema = fastavro.parse_schema(avro_schema)
-        
+
         # Define an optimized generator function
         def optimized_record_generator():
             for batch in table.to_batches(max_chunksize=optimal_batch_size):
                 records = batch.to_pylist()
-                
+
                 # Process only the columns that need conversion
                 for record in records:
                     # Process datetime columns
                     for col in datetime_columns:
-                        if col in record and record[col] is not None and hasattr(record[col], 'isoformat'):
+                        if (
+                            col in record
+                            and record[col] is not None
+                            and hasattr(record[col], "isoformat")
+                        ):
                             record[col] = record[col].isoformat()
-                    
+
                     # Process string columns
                     for col in string_columns:
                         if col in record and record[col] is not None:
                             record[col] = str(record[col])
-                    
+
                     yield record
-                
+
                 # Help garbage collection for large tables
                 del records
-        
+
         # Write Avro file using fastavro with the optimized generator
-        with FileSystemHandler.open_file(path_str, 'wb') as fo:
+        with FileSystemHandler.open_file(path_str, "wb") as fo:
             fastavro.writer(fo, parsed_schema, optimized_record_generator())
-    
+
     elif fmt is Format.PARQUET:
         # Optimize for data-lake workloads with better compression and performance
         parquet_kwargs = {
-            'compression': compression or 'zstd',  # ~30% smaller + ~1.2× write
-            'use_dictionary': kwargs.pop('use_dictionary', True),
-            'write_statistics': kwargs.pop('write_statistics', True),
-            'data_page_size': kwargs.pop('data_page_size', 512*1024),  # Sane page – row-group ratio
-            'version': kwargs.pop('version', '2.6'),
+            "compression": compression or "zstd",  # ~30% smaller + ~1.2× write
+            "use_dictionary": kwargs.pop("use_dictionary", True),
+            "write_statistics": kwargs.pop("write_statistics", True),
+            "data_page_size": kwargs.pop(
+                "data_page_size", 512 * 1024
+            ),  # Sane page – row-group ratio
+            "version": kwargs.pop("version", "2.6"),
         }
-        
+
         # Note: use_threads is not directly supported by the Parquet writer in this version
         # Remove it if present to avoid errors
-        kwargs.pop('use_threads', None)
-        
+        kwargs.pop("use_threads", None)
+
         # Add any remaining kwargs
         parquet_kwargs.update(kwargs)
-        
+
         # Get filesystem and path for cloud storage support
         fs, fs_path = FileSystemHandler.get_fs_and_path(path_str)
-        
+
         # Write the table using the filesystem
         papq.write_table(table, fs_path, filesystem=fs, **parquet_kwargs)
-    
+
     elif fmt is Format.JSON:
         # If table is empty, explicitly create an empty file
         if table.num_rows == 0:
-            with FileSystemHandler.open_file(path_str, 'wb') as f:
+            with FileSystemHandler.open_file(path_str, "wb") as f:
                 # Create empty file
                 pass
         elif table.num_rows > 0:
             # PyArrow doesn't have a direct write_json function for JSON Lines
             # Convert to list of records and write as JSON lines
             records = table.to_pylist()
-            with FileSystemHandler.open_file(path_str, 'w') as fo:
+            with FileSystemHandler.open_file(path_str, "w") as fo:
                 for record in records:
                     # Use default=str for types not directly serializable (like datetime)
-                    fo.write(json.dumps(record, default=str) + '\n')
-    
+                    fo.write(json.dumps(record, default=str) + "\n")
+
     elif fmt is Format.CSV:
         # Create WriteOptions with optimized defaults
         # Note: CSV writer doesn't support use_threads directly
         write_opts = pacsv.WriteOptions(
             include_header=kwargs.pop("include_header", True),
-            batch_size=kwargs.pop("batch_size", 1 << 16),  # Optimize batch size for wide tables
+            batch_size=kwargs.pop(
+                "batch_size", 1 << 16
+            ),  # Optimize batch size for wide tables
             delimiter=kwargs.pop("delimiter", ","),  # Handle delimiter parameter
-            quoting_style=kwargs.pop("quoting_style", "needed")  # Handle quoting_style parameter
+            quoting_style=kwargs.pop(
+                "quoting_style", "needed"
+            ),  # Handle quoting_style parameter
         )
         # Write the table using the filesystem
-        with FileSystemHandler.open_file(path_str, 'wb') as f:
+        with FileSystemHandler.open_file(path_str, "wb") as f:
             # Pass remaining kwargs to write_csv
             pacsv.write_csv(table, f, write_options=write_opts, **kwargs)
+
+    elif fmt is Format.XLSX:
+        # Write a PyArrow Table to an Excel workbook using pandas + openpyxl.
+        # We convert to pandas DataFrame first. For wide tables, this may be
+        # memory-intensive, but Excel has inherent 1M-row limits anyway.
+
+        sheet_name = kwargs.pop("sheet_name", "Sheet1")
+
+        # Convert to DataFrame. We set `ignore_metadata=True` to avoid Arrow
+        # extension types that pandas/openpyxl can’t serialize.
+        df = table.to_pandas(ignore_metadata=True)
+
+        # Normalize missing string representations: empty string and case-insensitive
+        # "null" tokens → pandas NA, so they will round-trip as blank cells.
+        df.replace({"": pd.NA, "null": pd.NA, "NULL": pd.NA}, inplace=True)
+
+        # Excel (openpyxl) cannot handle timezone-aware datetimes.
+        # Strip timezone information to avoid "datetimes with timezones" error.
+        for col in df.columns:
+            if isinstance(df[col].dtype, pd.DatetimeTZDtype):
+                df[col] = df[col].dt.tz_localize(None)
+
+        # pandas handles file opening and will overwrite existing files by
+        # default. Use FileSystemHandler to get a writable handle compatible
+        # with local and ADLS paths.
+        with FileSystemHandler.open_file(path_str, "wb") as fo:
+            # Need a file path or a binary buffer that openpyxl understands.
+            # If fo is a local-path file object, we can pass its name; else we
+            # must use a BytesIO buffer and then write it.
+            if getattr(fo, "name", None) and isinstance(path_str, str):
+                # Local filesystem – let pandas write directly via path string.
+                df.to_excel(
+                    fo.name,
+                    sheet_name=sheet_name,
+                    index=False,
+                    engine="openpyxl",
+                    **kwargs,
+                )
+            else:
+                import io
+
+                buf = io.BytesIO()
+                df.to_excel(
+                    buf, sheet_name=sheet_name, index=False, engine="openpyxl", **kwargs
+                )
+                buf.seek(0)
+                fo.write(buf.read())
+                buf.close()
 
     else:
         raise AssertionError("unreachable")
@@ -414,15 +555,16 @@ def _write_impl(table: pa.Table, path: Union[str, Path], fmt: Format, **kwargs) 
 # Add memoization cache for schema conversion
 _pyarrow_to_avro_type_cache = {}
 
+
 def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | dict:
     """Convert PyArrow type to Avro type, defaulting to nullable unions.
-    
+
     Uses memoization to avoid redundant computations for nested schemas.
-    
+
     Args:
         pa_type: PyArrow data type to convert
         field_path: Path to the field in the schema (for nested types)
-        
+
     Returns:
         Avro type representation (string, list, or dict)
     """
@@ -430,14 +572,18 @@ def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | d
     cache_key = (str(pa_type), field_path)
     if cache_key in _pyarrow_to_avro_type_cache:
         return _pyarrow_to_avro_type_cache[cache_key]
-    
+
     # Mapping from PyArrow types to Avro types
     if pa.types.is_null(pa_type):
         result = "null"
     elif pa.types.is_boolean(pa_type):
         # Ensure boolean types are represented as nullable unions in Avro
         result = ["null", "boolean"]
-    elif pa.types.is_int8(pa_type) or pa.types.is_int16(pa_type) or pa.types.is_int32(pa_type):
+    elif (
+        pa.types.is_int8(pa_type)
+        or pa.types.is_int16(pa_type)
+        or pa.types.is_int32(pa_type)
+    ):
         avro_type = "int"
         result = ["null", avro_type]
     elif pa.types.is_int64(pa_type):
@@ -451,7 +597,11 @@ def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | d
         result = ["null", "string"]
     elif pa.types.is_binary(pa_type):
         result = ["null", "bytes"]
-    elif pa.types.is_timestamp(pa_type) or pa.types.is_date(pa_type) or pa.types.is_time(pa_type):
+    elif (
+        pa.types.is_timestamp(pa_type)
+        or pa.types.is_date(pa_type)
+        or pa.types.is_time(pa_type)
+    ):
         # Handle datetime types as strings in Avro, allow nulls
         result = ["null", "string"]
     elif pa.types.is_list(pa_type):
@@ -460,23 +610,27 @@ def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | d
     elif pa.types.is_struct(pa_type):
         # Create a unique name for this struct based on its path
         struct_name = field_path.lstrip("_") if field_path else "record"
-        
+
         fields = []
         for i, field in enumerate(pa_type):
             # Create a unique path for nested fields
             nested_path = f"{field_path}_{field.name}" if field_path else field.name
-            fields.append({
-                "name": field.name,
-                "type": _pyarrow_to_avro_type(field.type, nested_path)
-            })
+            fields.append(
+                {
+                    "name": field.name,
+                    "type": _pyarrow_to_avro_type(field.type, nested_path),
+                }
+            )
         result = {"type": "record", "name": struct_name, "fields": fields}
     else:
         # Default to string for unknown types
         avro_type = "string"
         # Consider logging a warning here
-        print(f"Warning: Unsupported PyArrow type {pa_type} at {field_path}. Converting to Avro string.")
+        print(
+            f"Warning: Unsupported PyArrow type {pa_type} at {field_path}. Converting to Avro string."
+        )
         result = ["null", avro_type]
-    
+
     # Cache the result
     _pyarrow_to_avro_type_cache[cache_key] = result
     return result
@@ -484,11 +638,11 @@ def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | d
 
 def _generate_avro_schema(table: pa.Table, sample_records: list) -> tuple:
     """Generate an Avro schema based on a PyArrow table and sample records.
-    
+
     Args:
         table: PyArrow table
         sample_records: Sample of records to analyze for type inference
-        
+
     Returns:
         tuple: (avro_schema, string_columns) where avro_schema is the generated schema
                and string_columns is a set of column names that should be converted to strings
@@ -499,70 +653,70 @@ def _generate_avro_schema(table: pa.Table, sample_records: list) -> tuple:
         for key, value in record.items():
             if value is not None:
                 column_types[key].add(type(value).__name__)
-    
+
     # Create schema based on sample data analysis
     avro_schema = {"type": "record", "name": "Root", "fields": []}
     string_columns = set()
-    
+
     for field in table.schema:
         field_name = field.name
         types_in_column = column_types[field_name]
-        
+
         # Default to the PyArrow type mapping
         field_type = _pyarrow_to_avro_type(field.type, field_name)
-        
+
         # If we have mixed types or string type is present, use string for safety
-        if len(types_in_column) > 1 or 'str' in types_in_column:
+        if len(types_in_column) > 1 or "str" in types_in_column:
             # Only override if not a complex type (struct or array)
             if not isinstance(field_type, dict):
                 field_type = ["null", "string"]
                 string_columns.add(field_name)
-        
-        avro_schema["fields"].append({
-            "name": field_name,
-            "type": field_type
-        })
-    
+
+        avro_schema["fields"].append({"name": field_name, "type": field_type})
+
     return avro_schema, string_columns
 
 
 def _avro_to_pyarrow_schema(avro_schema: Dict) -> pa.Schema:
     """Convert Avro schema (dict) to PyArrow schema."""
     fields = []
-    if avro_schema.get('type') != 'record' or 'fields' not in avro_schema:
+    if avro_schema.get("type") != "record" or "fields" not in avro_schema:
         raise ValueError("Avro schema must be a record type with fields")
 
-    for field in avro_schema['fields']:
+    for field in avro_schema["fields"]:
         fields.append(_avro_field_to_pyarrow(field))
 
     return pa.schema(fields)
+
 
 def _avro_type_to_pyarrow(avro_type: Any) -> pa.DataType:
     """Convert a single Avro type definition to a PyArrow DataType."""
     # Handle union types (often ["null", type])
     if isinstance(avro_type, list):
         # Find the non-null type in the union
-        non_null_types = [t for t in avro_type if t != 'null']
+        non_null_types = [t for t in avro_type if t != "null"]
         if len(non_null_types) == 1:
             # Recursively convert the non-null type
             return _avro_type_to_pyarrow(non_null_types[0])
         else:
             # Handle unions with multiple non-null types (complex) - default to string for now
             # Or raise error if such unions are not supported
-            print(f"Warning: Avro union with multiple non-null types {non_null_types} not fully supported. Defaulting to string.")
+            print(
+                f"Warning: Avro union with multiple non-null types {non_null_types} not fully supported. Defaulting to string."
+            )
             return pa.string()
 
     # Handle logical types (dict)
-    if isinstance(avro_type, dict) and 'logicalType' in avro_type:
-        logical_type = avro_type.get('logicalType')
-        base_type = avro_type.get('type')
-        if logical_type == 'date' and base_type == 'int':
+    if isinstance(avro_type, dict) and "logicalType" in avro_type:
+        logical_type = avro_type.get("logicalType")
+        base_type = avro_type.get("type")
+        if logical_type == "date" and base_type == "int":
             return pa.date32()
-        elif logical_type == 'timestamp-micros' and base_type == 'long':
-            return pa.timestamp('us')
-        elif logical_type == 'decimal' and base_type == 'bytes':
-            precision = avro_type.get('precision')
-            scale = avro_type.get('scale')
+        elif logical_type == "timestamp-micros" and base_type == "long":
+            return pa.timestamp("us")
+        elif logical_type == "decimal" and base_type == "bytes":
+            precision = avro_type.get("precision")
+            scale = avro_type.get("scale")
             if precision is not None and scale is not None:
                 return pa.decimal128(precision, scale)
         # Add other logical types as needed (time, duration, uuid etc.)
@@ -571,48 +725,51 @@ def _avro_type_to_pyarrow(avro_type: Any) -> pa.DataType:
 
     # Handle complex types defined as dicts (record, array, map, enum)
     if isinstance(avro_type, dict):
-      avro_type_kind = avro_type.get('type')
-      if avro_type_kind == 'record':
-           # Nested record conversion (simplified - may need named types handling)
-          fields = [_avro_field_to_pyarrow(f) for f in avro_type.get('fields', [])]
-          return pa.struct(fields)
-      elif avro_type_kind == 'array':
-          item_type = _avro_type_to_pyarrow(avro_type.get('items'))
-          return pa.list_(item_type)
-      elif avro_type_kind == 'map':
-          value_type = _avro_type_to_pyarrow(avro_type.get('values'))
-          return pa.map_(pa.string(), value_type) # Avro map keys are always strings
-      elif avro_type_kind == 'enum':
-          # Represent Avro enum as PyArrow dictionary with indices, or just string
-          return pa.string() # Simplest representation
-      # Fall through if it's a dict but not a recognized complex type or logical type
-      
+        avro_type_kind = avro_type.get("type")
+        if avro_type_kind == "record":
+            # Nested record conversion (simplified - may need named types handling)
+            fields = [_avro_field_to_pyarrow(f) for f in avro_type.get("fields", [])]
+            return pa.struct(fields)
+        elif avro_type_kind == "array":
+            item_type = _avro_type_to_pyarrow(avro_type.get("items"))
+            return pa.list_(item_type)
+        elif avro_type_kind == "map":
+            value_type = _avro_type_to_pyarrow(avro_type.get("values"))
+            return pa.map_(pa.string(), value_type)  # Avro map keys are always strings
+        elif avro_type_kind == "enum":
+            # Represent Avro enum as PyArrow dictionary with indices, or just string
+            return pa.string()  # Simplest representation
+        # Fall through if it's a dict but not a recognized complex type or logical type
+
     # Handle primitive types (string)
-    if avro_type == 'null':
+    if avro_type == "null":
         return pa.null()
-    elif avro_type == 'boolean':
+    elif avro_type == "boolean":
         return pa.bool_()
-    elif avro_type == 'int':
+    elif avro_type == "int":
         return pa.int32()
-    elif avro_type == 'long':
+    elif avro_type == "long":
         return pa.int64()
-    elif avro_type == 'float':
+    elif avro_type == "float":
         return pa.float32()
-    elif avro_type == 'double':
+    elif avro_type == "double":
         return pa.float64()
-    elif avro_type == 'bytes':
+    elif avro_type == "bytes":
         return pa.binary()
-    elif avro_type == 'string':
+    elif avro_type == "string":
         return pa.string()
 
     else:
         print(f"Warning: Unsupported Avro type '{avro_type}'. Defaulting to string.")
         return pa.string()
 
+
 def _avro_field_to_pyarrow(avro_field: Dict) -> pa.Field:
     """Convert an Avro field definition to a PyArrow Field."""
-    name = avro_field['name']
-    pa_type = _avro_type_to_pyarrow(avro_field['type'])
+    name = avro_field["name"]
+    pa_type = _avro_type_to_pyarrow(avro_field["type"])
     # Check if the field is nullable (common pattern: type is a list starting with 'null')
-    is_nullable = isinstance(avro_field['type'], list) and avro_field['type'][0] == 'null'
+    is_nullable = (
+        isinstance(avro_field["type"], list) and avro_field["type"][0] == "null"
+    )
     return pa.field(name, pa_type, nullable=is_nullable)
