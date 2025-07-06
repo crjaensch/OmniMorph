@@ -311,14 +311,14 @@ Under the hood OmniMorph uses `pandas` + `openpyxl` to convert sheets to Arrow t
 OmniMorph includes a powerful SQL query engine powered by DuckDB that allows you to run SQL queries directly against data files without needing to set up a database.
 
 Features:
-- Run SQL queries against CSV, JSON, Avro, and Parquet files
+- Run SQL queries against CSV, XLSX, JSON, Avro, and Parquet files
 - Results displayed as nicely formatted markdown tables
 - Automatic schema inference from data files
 
 Example:
 ```bash
 # Basic query with limit
-poetry run omo-cli query userdata.csv "SELECT id, first_name, last_name FROM userdata LIMIT 5"
+poetry run omo-cli query userdata.xlsx "SELECT id, first_name, last_name FROM userdata LIMIT 5"
 
 # Aggregation query with grouping
 poetry run omo-cli query sales.parquet "SELECT category, COUNT(*) as count, SUM(amount) as total FROM sales GROUP BY category"
@@ -497,7 +497,7 @@ metadata = get_metadata("data.parquet")             # File size, record count, e
 from omni_morph.data import get_stats, Format
 
 # Get column statistics from files
-stats = get_stats("data.csv")                       # Get stats for all columns
+stats = get_stats("data.xlsx")                      # Get stats for all columns
 stats = get_stats("data.parquet", columns=["col1", "col2"])  # Get stats for specific columns
 stats = get_stats("data.txt", fmt=Format.CSV)       # Force a specific format
 stats = get_stats("large_data.parquet", sample_size=5000)  # Adjust t-digest sample size
@@ -524,7 +524,7 @@ merge_files(
     progress=True  # Show progress during merge
 )
 
-# Merge files with different schemas (with automatic casting)
+# Merge files with slightly differing schemas (with automatic casting)
 merge_files(
     sources=["data1.parquet", "data2.avro", "data3.json"],
     output_path="merged_data.parquet",
