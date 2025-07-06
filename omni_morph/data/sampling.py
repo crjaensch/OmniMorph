@@ -206,8 +206,8 @@ def iter_xlsx(path: str, *, sheet_name: int | str = 0):
     Yields:
         dict: Row records compatible with :pyfunc:`streaming_sample`.
     """
-    import pandas as pd
+    from omni_morph.data.filesystems import FileSystemHandler
 
-    df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
+    df = FileSystemHandler.read_excel(path, sheet_name=sheet_name)
     for rec in df.to_dict(orient="records"):
         yield rec

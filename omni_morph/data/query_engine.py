@@ -425,13 +425,14 @@ def _register_source(con, fmt, source, *, lazy=False):
         # ------------------------------------------------------------------
         import pandas as pd
         import pyarrow as pa
+        from omni_morph.data.filesystems import FileSystemHandler
 
         try:
             if lazy:
-                df = pd.read_excel(source, nrows=0, engine="openpyxl")
+                df = FileSystemHandler.read_excel(source, nrows=0)
                 df = df.head(0)  # ensure empty dataframe with dtypes
             else:
-                df = pd.read_excel(source, engine="openpyxl")
+                df = FileSystemHandler.read_excel(source)
 
             table = pa.Table.from_pandas(df, preserve_index=False)
             con.register(name, table)

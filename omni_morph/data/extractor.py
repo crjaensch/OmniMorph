@@ -39,6 +39,7 @@ from .sampling import (
     iter_csv,
 )
 from .exceptions import ExtractError
+from .filesystems import FileSystemHandler
 
 __all__ = [
     "head",
@@ -563,12 +564,11 @@ def _xlsx_extract(path: str, n: int, op: _Operation, limit: int) -> pa.Table:
     rows via the ``nrows`` parameter. For *tail* we load the full sheet (with a
     configurable safety limit) and slice from the end.
     """
-    import pandas as pd
 
     if op is _Operation.HEAD:
-        df = pd.read_excel(path, nrows=n, engine="openpyxl")
+        df = FileSystemHandler.read_excel(path, nrows=n)
     else:
-        df = pd.read_excel(path, engine="openpyxl")
+        df = FileSystemHandler.read_excel(path)
         df = df.tail(n)
 
     return pa.Table.from_pandas(df, preserve_index=False)
@@ -609,9 +609,7 @@ def xlsx_sample(
     replace: bool,
 ) -> pa.Table:
     """Sample rows from an Excel sheet using pandas for robust dtype handling."""
-    import pandas as pd
-
-    df = pd.read_excel(path, engine="openpyxl")
+    df = FileSystemHandler.read_excel(path)
 
     if n is not None:
         n_eff = min(n, len(df))

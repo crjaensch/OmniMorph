@@ -57,7 +57,8 @@ def merge_files(
 
     resolved_fmt = output_fmt or Format.from_path(output_path)
     out_fmt = "jsonl" if resolved_fmt is Format.JSON else resolved_fmt.name.lower()
-    if out_fmt not in {"parquet", "avro", "csv", "jsonl"}:
+    # Add Excel support
+    if out_fmt not in {"parquet", "avro", "csv", "jsonl", "xlsx"}:
         raise ExtractError(f"Unsupported output format {out_fmt!r}")
 
     # ---------- establish target schema from the first source ---------------
@@ -177,6 +178,36 @@ def _open_writer(path: str, fmt: str, schema: pa.Schema):
 
         _write.close = lambda: fo.close()
         return _write
+    if fmt == "xlsx":
+        """Local filesystem Excel writer using pandas.ExcelWriter (openpyxl)."""
+        import pandas as _pd
+
+        # Excel writing requires a local seekable file; reject remote paths for now.
+        fs, fs_path = FileSystemHandler.get_fs_and_path(path)
+
+        # fsspec.LocalFileSystem may report protocol as "file" or ["file"].
+        proto = getattr(fs, "protocol", "file")
+        if isinstance(proto, (list, tuple)):
+            proto = proto[0]
+        if proto not in {"", "file"}:
+            raise ExtractError("Writing XLSX to remote filesystems is not supported.")
+
+        _buffer: list[pa.Table] = []  # accumulate batches then write once on close
+
+        def _write(tbl: pa.Table):  # noqa: D401
+            _buffer.append(tbl)
+
+        def _close():
+            if not _buffer:
+                return
+            full_tbl = pa.concat_tables(_buffer)
+            df = full_tbl.to_pandas()
+            with _pd.ExcelWriter(fs_path, engine="openpyxl") as _w:
+                df.to_excel(_w, index=False)
+
+        _write.close = _close  # type: ignore[attr-defined]
+
+        return _write
     if fmt == "csv":
         header_written = False
         # Use FileSystemHandler to open file for Azure support
@@ -241,6 +272,18 @@ def _batch_reader(path: str, chunksize: int):
                     batch = []
             if batch:
                 yield pa.Table.from_pylist(batch)
+    elif fmt == "xlsx":
+        # Read full worksheet then yield chunked PyArrow tables
+        import math  # noqa: F401 – might be useful in future
+
+        df = FileSystemHandler.read_excel(path)
+        total = len(df)
+        if total == 0:
+            return
+
+        for start in range(0, total, chunksize):
+            end = min(start + chunksize, total)
+            yield pa.Table.from_pandas(df.iloc[start:end], preserve_index=False)
     elif fmt == "csv":
         # Use FileSystemHandler to open file for Azure support
         with FileSystemHandler.open_file(path, "r", encoding="utf-8") as f:

@@ -208,7 +208,7 @@ def _read_impl(path: Path, fmt: Format, schema: pa.Schema = None, **kwargs) -> p
         # processed `columns` variable earlier. We'll sub-select after loading
         # to avoid complex header inference issues.
 
-        df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl", **kwargs)
+        df = FileSystemHandler.read_excel(path, sheet_name=sheet_name, **kwargs)
 
         # Sub-select columns if requested.
         if columns is not None:

@@ -147,3 +147,57 @@ class FileSystemHandler:
         """
         fs, path = cls.get_fs_and_path(path)
         return fs.info(path)
+
+    @classmethod
+    def read_excel(
+        cls,
+        path: str,
+        *,
+        sheet_name: int | str = 0,
+        **pd_kwargs,
+    ):
+        """Read an Excel workbook (.xlsx) from local or Azure storage.
+
+        Parameters
+        ----------
+        path : str
+            Local path (e.g. ``/data/file.xlsx``) or cloud URI
+            (e.g. ``abfss://container@account.dfs.core.windows.net/file.xlsx``).
+        sheet_name : int | str, default 0
+            Worksheet selector forwarded to :func:`pandas.read_excel`.
+            • ``int`` – zero-based index (0 = first sheet)
+            • ``str`` – worksheet name
+        **pd_kwargs
+            Additional keyword arguments for :func:`pandas.read_excel`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Loaded worksheet contents.
+
+        Notes
+        -----
+        For remote filesystems (anything other than ``file`` protocol) the
+        workbook is first streamed into an in-memory ``BytesIO`` buffer because
+        ``openpyxl`` requires a seek-able object.
+        """
+        import io
+        import pandas as pd
+
+        # Accept pathlib.Path objects as well as plain strings
+        path_str = str(path)
+        fs, norm_path = cls.get_fs_and_path(path_str)
+        protocol = getattr(fs, "protocol", "file")
+
+        if protocol == "file":
+            # Local paths can be passed directly to pandas/openpyxl
+            return pd.read_excel(
+                norm_path, sheet_name=sheet_name, engine="openpyxl", **pd_kwargs
+            )
+
+        # Remote: download to memory then hand to pandas
+        with fs.open(norm_path, "rb") as fo:
+            data = fo.read()
+        return pd.read_excel(
+            io.BytesIO(data), sheet_name=sheet_name, engine="openpyxl", **pd_kwargs
+        )
