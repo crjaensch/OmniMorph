@@ -592,7 +592,7 @@ def _pyarrow_to_avro_type(pa_type: pa.DataType, field_path="") -> str | list | d
     elif pa.types.is_floating(pa_type):
         # Allow for null values in float fields
         result = ["null", "double"]
-    elif pa.types.is_string(pa_type):
+    elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
         # Allow for null values in string fields
         result = ["null", "string"]
     elif pa.types.is_binary(pa_type):

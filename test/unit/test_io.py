@@ -55,7 +55,13 @@ def sample_df():
 @pytest.fixture
 def sample_table(sample_df):
     """Provides a sample PyArrow Table derived from the DataFrame."""
-    return pa.Table.from_pandas(sample_df, preserve_index=False)
+    tbl = pa.Table.from_pandas(sample_df, preserve_index=False)
+    # Normalize large_string to string for consistent comparisons across pyarrow versions
+    schema = pa.schema([
+        pa.field(f.name, pa.string() if pa.types.is_large_string(f.type) else f.type)
+        for f in tbl.schema
+    ])
+    return tbl.cast(schema)
 
 
 @pytest.fixture

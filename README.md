@@ -33,6 +33,8 @@ Want more in-depth information about OmniMorph? Visit [![Ask DeepWiki](https://d
   - [File Merging](#file-merging)
   - [SQL Queries (API)](#sql-queries-api)
 - [Supported File Formats](#supported-file-formats)
+- [Dependency Versions](#dependency-versions)
+  - [PyArrow `large_string` Compatibility](#pyarrow-large_string-compatibility)
 - [Alpha Features](#alpha-features)
   - [Azure ADLS Gen2 Support](#azure-adls-gen2-support)
 
@@ -569,6 +571,80 @@ if error:
 - **Avro** (.avro)
 - **Parquet** (.parquet)
 - **Excel** (.xlsx)
+
+## Dependency Versions
+
+OmniMorph maintains up-to-date dependencies for security and performance. The following table lists the external libraries and their version constraints as defined in `pyproject.toml`:
+
+### Main Dependencies
+
+| Package | Version Constraint | Installed Version | Notes |
+| ------- | ------------------- | ----------------- | ----- |
+| pyarrow | `>=23.0.1,<25.0.0` | 24.0.0 | Bumped from `>=18.0.0,<21.0.0` to fix high-severity security vulnerability |
+| fastavro | `>=1.12.0,<2.0.0` | 1.12.2 | Avro read/write support |
+| numpy | `>=2.2.0,<3.0.0` | 2.5.1 | Numerical computing |
+| typer | `>=0.12.0,<0.27.0` | 0.26.8 | CLI framework |
+| pandas | `>=2.2.0,<4.0.0` | 3.0.3 | Data manipulation (Excel, CSV chunked reading) |
+| genson | `>=1.4.0,<2.0.0` | 1.4.0 | JSON Schema generation |
+| fastdigest | `>=0.12.0,<0.13.0` | 0.12.0 | T-digest for approximate median computation |
+| duckdb | `>=1.5.0,<2.0.0` | 1.5.4 | In-memory SQL query engine |
+| openai | `>=2.0.0,<3.0.0` | 2.44.0 | AI-powered SQL error suggestions |
+| tabulate | `>=0.10.0,<0.11.0` | 0.10.0 | Pretty-printed query result tables |
+| rich | `>=14.0.0,<16.0.0` | 15.0.0 | Terminal formatting and syntax highlighting |
+| adlfs | `>=2025.0.0,<2027.0.0` | 2026.5.0 | Azure Data Lake Storage Gen2 filesystem |
+| fsspec | `>=2025.0.0,<2027.0.0` | 2026.6.0 | Filesystem abstraction layer |
+| openpyxl | `>=3.1.5,<4.0.0` | 3.1.5 | Excel (.xlsx) read/write engine |
+| inquirerpy | `>=0.3.4,<0.4.0` | 0.3.4 | Interactive wizard prompts |
+| prompt-toolkit | `>=3.0.51,<4.0.0` | 3.0.52 | Terminal input handling |
+| python-snappy | `>=0.7.3,<0.8.0` | 0.7.3 | Snappy compression support |
+| datasketch (optional) | `>=1.6.0,<3.0.0` | 2.0.0 | HyperLogLog for high-cardinality distinct counts |
+
+### Dev / Test Dependencies
+
+| Package | Version Constraint | Installed Version |
+| ------- | ------------------- | ----------------- |
+| pytest | `>=8.0.0,<10.0.0` | 9.1.1 |
+| pytest-cov | `>=5.0.0,<8.0.0` | 7.1.0 |
+| pytest-randomly | `>=4.0.0,<5.0.0` | 4.1.0 |
+| ruff | `>=0.15.0,<0.16.0` | 0.15.20 |
+| isort | `>=5.13.0,<9.0.0` | 8.0.1 |
+| flake8 | `>=7.0.0,<8.0.0` | 7.3.0 |
+| mypy | `>=1.10.0,<3.0.0` | 2.2.0 |
+
+### PyArrow `large_string` Compatibility
+
+Starting with PyArrow 24.0.0, `pa.Table.from_pandas()` defaults to producing `large_string` columns instead of `string` columns. This change caused type mismatches when comparing tables that pass through pandas (e.g., Excel and CSV roundtrips) against tables created directly with PyArrow.
+
+**Code fix** (`omni_morph/data/_io.py`):
+
+The `_pyarrow_to_avro_type()` function was updated to handle `large_string` alongside `string` when mapping PyArrow types to Avro types. Without this fix, `large_string` columns would fall through to the unsupported-type default, printing a spurious warning and potentially losing type information during Avro conversion:
+
+```python
+# Before (only handled string):
+elif pa.types.is_string(pa_type):
+    result = ["null", "string"]
+
+# After (handles both string and large_string):
+elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
+    result = ["null", "string"]
+```
+
+**Test fixes** (`test/unit/test_io.py` and `test/unit/test_roundtrip.py`):
+
+The unit tests were updated to normalize `large_string` columns to `string` before type comparisons, ensuring consistent behavior across PyArrow versions:
+
+- In `test_io.py`, the `sample_table` fixture casts any `large_string` columns to `string` after creating the table from a pandas DataFrame.
+- In `test_roundtrip.py`, a `_normalize_string_types()` helper function is applied to both the expected and actual tables before calling `.equals()` in the roundtrip assertions.
+
+```python
+def _normalize_string_types(table: pa.Table) -> pa.Table:
+    """Cast large_string columns to string for consistent comparison across pyarrow versions."""
+    schema = pa.schema([
+        pa.field(f.name, pa.string() if pa.types.is_large_string(f.type) else f.type)
+        for f in table.schema
+    ])
+    return table.cast(schema)
+```
 
 ## Alpha Features
 

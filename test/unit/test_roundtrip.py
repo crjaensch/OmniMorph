@@ -8,6 +8,15 @@ import pytest
 
 import omni_morph.data as omd
 
+
+def _normalize_string_types(table: pa.Table) -> pa.Table:
+    """Cast large_string columns to string for consistent comparison across pyarrow versions."""
+    schema = pa.schema([
+        pa.field(f.name, pa.string() if pa.types.is_large_string(f.type) else f.type)
+        for f in table.schema
+    ])
+    return table.cast(schema)
+
 # ---------------------------- fixtures ------------------------------------ #
 
 
@@ -47,4 +56,6 @@ def test_conversion_roundtrip(tmp_path: Path, sample_table: pa.Table, src_fmt, d
 
     # read back and compare
     roundtrip = omd.read(dst_file, fmt=dst_fmt)
-    assert sample_table.equals(roundtrip), f"{src_fmt}->{dst_fmt} mismatch"
+    assert _normalize_string_types(sample_table).equals(
+        _normalize_string_types(roundtrip)
+    ), f"{src_fmt}->{dst_fmt} mismatch"
